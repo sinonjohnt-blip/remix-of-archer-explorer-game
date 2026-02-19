@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Phaser from "phaser";
 
 interface ArrowProjectile {
@@ -28,6 +28,9 @@ class MainScene extends Phaser.Scene {
   private teamBlue: ArcherData[] = [];
   private teamRed: ArcherData[] = [];
   private arrows: ArrowProjectile[] = [];
+  private battleStarted = false;
+  private dividerLine!: Phaser.GameObjects.Graphics;
+  private placementText!: Phaser.GameObjects.Text;
 
   constructor() {
     super("MainScene");
@@ -54,6 +57,8 @@ class MainScene extends Phaser.Scene {
     this.teamBlue = [];
     this.teamRed = [];
 
+    this.battleStarted = false;
+
     if (!this.anims.exists("archer-idle")) {
       this.anims.create({
         key: "archer-idle",
@@ -75,30 +80,66 @@ class MainScene extends Phaser.Scene {
       });
     }
 
-    const unitCount = 4;
-    const startYBase = 300;
-    const ySpacing = 70;
+    // Draw divider line
+    this.dividerLine = this.add.graphics();
+    this.dividerLine.lineStyle(2, 0xffffff, 0.3);
+    this.dividerLine.lineBetween(400, 0, 400, 600);
 
-    // Spawn blue team (left)
-    for (let i = 0; i < unitCount; i++) {
-      const y = startYBase + i * ySpacing;
-      const archer = this.createArcher(60 + Math.random() * 30, y, 1, false, 0x3399ff, 15);
-      this.teamBlue.push(archer);
-    }
+    // Placement hint text
+    this.placementText = this.add.text(400, 30, "Click to place archers. Left = Blue, Right = Red", {
+      fontSize: "14px",
+      color: "#ffffff",
+      backgroundColor: "#00000088",
+      padding: { x: 8, y: 4 },
+    }).setOrigin(0.5);
 
-    // Spawn red team (right)
-    for (let i = 0; i < unitCount; i++) {
-      const y = startYBase + i * ySpacing;
-      const archer = this.createArcher(700 + Math.random() * 30, y, -1, true, 0xff4455, 12);
-      this.teamRed.push(archer);
+    // Click to place units
+    this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+      if (this.battleStarted) return;
+      const x = pointer.x;
+      const y = pointer.y;
+
+      if (x < 400) {
+        const archer = this.createArcher(x, y, 1, false, 0x3399ff, 15);
+        this.teamBlue.push(archer);
+      } else {
+        const archer = this.createArcher(x, y, -1, true, 0xff4455, 12);
+        this.teamRed.push(archer);
+      }
+    });
+  }
+
+  startBattle() {
+    if (this.battleStarted) return;
+    if (this.teamBlue.length === 0 || this.teamRed.length === 0) return;
+    this.battleStarted = true;
+    this.dividerLine.clear();
+    this.placementText.setVisible(false);
+  }
+
+  clearAll() {
+    for (const unit of [...this.teamBlue, ...this.teamRed]) {
+      unit.sprite.destroy();
+      unit.hpBar.destroy();
     }
+    for (const arrow of this.arrows) {
+      arrow.sprite.destroy();
+    }
+    this.teamBlue = [];
+    this.teamRed = [];
+    this.arrows = [];
+    this.battleStarted = false;
+    this.dividerLine.clear();
+    this.dividerLine.lineStyle(2, 0xffffff, 0.3);
+    this.dividerLine.lineBetween(400, 0, 400, 600);
+    this.placementText.setVisible(true);
   }
 
   createArcher(x: number, y: number, direction: number, flipX: boolean, teamColor: number, damage: number): ArcherData {
     const sprite = this.add.sprite(x, y, "idle");
     sprite.setScale(1.2);
     sprite.setFlipX(flipX);
-    sprite.play("archer-run");
+    sprite.play("archer-idle");
 
     const archer: ArcherData = {
       sprite,
@@ -286,6 +327,8 @@ class MainScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number) {
+    if (!this.battleStarted) return;
+
     const blueAlive = this.teamBlue.some(a => !a.dead);
     const redAlive = this.teamRed.some(a => !a.dead);
     if (!blueAlive && !redAlive) return;
@@ -360,21 +403,30 @@ const PhaserGame = () => {
     };
   }, []);
 
-  const handleRestart = () => {
-    if (gameRef.current) {
-      gameRef.current.scene.getScene("MainScene")?.scene.restart();
-    }
+  const getScene = (): MainScene | null => {
+    return gameRef.current?.scene.getScene("MainScene") as MainScene | null;
   };
+
+  const handleStart = () => getScene()?.startBattle();
+  const handleClear = () => getScene()?.clearAll();
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-background gap-4">
       <div ref={containerRef} />
-      <button
-        onClick={handleRestart}
-        className="px-6 py-2 bg-primary text-primary-foreground rounded-md font-semibold hover:opacity-90 transition-opacity"
-      >
-        Restart Battle
-      </button>
+      <div className="flex gap-3">
+        <button
+          onClick={handleStart}
+          className="px-6 py-2 bg-primary text-primary-foreground rounded-md font-semibold hover:opacity-90 transition-opacity"
+        >
+          Start Battle
+        </button>
+        <button
+          onClick={handleClear}
+          className="px-6 py-2 bg-destructive text-destructive-foreground rounded-md font-semibold hover:opacity-90 transition-opacity"
+        >
+          Clear
+        </button>
+      </div>
     </div>
   );
 };
