@@ -2,6 +2,13 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import Phaser from "phaser";
 import MedievalButton from "./MedievalButton";
 import UnitSelector, { type UnitType } from "./UnitSelector";
+import GoldDisplay from "./GoldDisplay";
+
+const UNIT_COSTS: Record<UnitType, number> = {
+  archer: 50,
+  knight: 80,
+};
+const STARTING_GOLD = 500;
 
 interface ArrowProjectile {
   sprite: Phaser.GameObjects.Sprite;
@@ -33,6 +40,7 @@ class MainScene extends Phaser.Scene {
   private arrows: ArrowProjectile[] = [];
   private battleStarted = false;
   public selectedUnitType: UnitType = "archer";
+  public goldRef: { blue: number; red: number } = { blue: 500, red: 500 };
   private dividerLine!: Phaser.GameObjects.Graphics;
   private placementText!: Phaser.GameObjects.Text;
 
@@ -90,11 +98,11 @@ class MainScene extends Phaser.Scene {
     this.dividerLine.lineBetween(400, 0, 400, 600);
 
     // Placement hint text
-    this.placementText = this.add.text(400, 30, "Click to place archers. Left = Blue, Right = Red", {
-      fontSize: "14px",
-      color: "#ffffff",
-      backgroundColor: "#00000088",
-      padding: { x: 8, y: 4 },
+    this.placementText = this.add.text(400, 30, "Click to place units. Left = Blue, Right = Red", {
+      fontSize: "13px",
+      color: "#e8d5a3",
+      backgroundColor: "#1a150e99",
+      padding: { x: 10, y: 5 },
     }).setOrigin(0.5);
 
     // Click to place units
@@ -103,19 +111,25 @@ class MainScene extends Phaser.Scene {
       const x = pointer.x;
       const y = pointer.y;
       const unitType = this.selectedUnitType;
+      const cost = unitType === "knight" ? 80 : 50;
+      const team: "blue" | "red" = x < 400 ? "blue" : "red";
+      const currentGold = team === "blue" ? this.goldRef.blue : this.goldRef.red;
+      if (currentGold < cost) return; // not enough gold
+
       const isKnight = unitType === "knight";
       const hp = isKnight ? 180 : 100;
       const damage = isKnight ? 8 : 15;
       const range = isKnight ? 120 : 500;
       const scale = isKnight ? 0.9 : 0.85;
 
-      if (x < 400) {
+      if (team === "blue") {
         const unit = this.createArcher(x, y, 1, false, 0x3399ff, damage, unitType, hp, range, scale);
         this.teamBlue.push(unit);
       } else {
         const unit = this.createArcher(x, y, -1, true, 0xff4455, damage, unitType, hp, range, scale);
         this.teamRed.push(unit);
       }
+      this.events.emit("unit-placed", { team, cost });
     });
   }
 
@@ -400,11 +414,13 @@ const PhaserGame = () => {
   const gameRef = useRef<Phaser.Game | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [selectedUnit, setSelectedUnit] = useState<UnitType>("archer");
+  const [blueGold, setBlueGold] = useState(STARTING_GOLD);
+  const [redGold, setRedGold] = useState(STARTING_GOLD);
 
   useEffect(() => {
     if (gameRef.current || !containerRef.current) return;
 
-    gameRef.current = new Phaser.Game({
+    const game = new Phaser.Game({
       type: Phaser.AUTO,
       width: 800,
       height: 600,
@@ -413,9 +429,24 @@ const PhaserGame = () => {
       scene: MainScene,
       pixelArt: true,
     });
+    gameRef.current = game;
+
+    // Listen for unit placement to deduct gold
+    const scene = game.scene.getScene("MainScene") as MainScene;
+    const checkScene = setInterval(() => {
+      const s = game.scene.getScene("MainScene") as MainScene;
+      if (s && s.events) {
+        clearInterval(checkScene);
+        s.events.on("unit-placed", (data: { team: "blue" | "red"; cost: number }) => {
+          if (data.team === "blue") setBlueGold(g => g - data.cost);
+          else setRedGold(g => g - data.cost);
+        });
+      }
+    }, 100);
 
     return () => {
-      gameRef.current?.destroy(true);
+      clearInterval(checkScene);
+      game.destroy(true);
       gameRef.current = null;
     };
   }, []);
@@ -425,25 +456,66 @@ const PhaserGame = () => {
   }, []);
 
   const handleStart = useCallback(() => getScene()?.startBattle(), [getScene]);
-  const handleClear = useCallback(() => getScene()?.clearAll(), [getScene]);
+  const handleClear = useCallback(() => {
+    getScene()?.clearAll();
+    setBlueGold(STARTING_GOLD);
+    setRedGold(STARTING_GOLD);
+  }, [getScene]);
 
   const handleUnitSelect = useCallback((type: UnitType) => {
     setSelectedUnit(type);
     const scene = getScene();
-    if (scene) scene.selectedUnitType = type;
-  }, [getScene]);
+    if (scene) {
+      scene.selectedUnitType = type;
+      scene.goldRef = { blue: blueGold, red: redGold };
+    }
+  }, [getScene, blueGold, redGold]);
+
+  // Keep gold synced to scene
+  useEffect(() => {
+    const scene = getScene();
+    if (scene) scene.goldRef = { blue: blueGold, red: redGold };
+  }, [blueGold, redGold, getScene]);
 
   return (
     <div
       className="flex flex-col items-center justify-center min-h-screen gap-0"
       style={{ background: "linear-gradient(180deg, hsl(30 20% 15%) 0%, hsl(25 25% 10%) 100%)" }}
     >
+      {/* Gold display row */}
       <div
-        className="rounded-t-lg overflow-hidden border-x-4 border-t-4"
+        className="flex items-center justify-between w-full px-4 py-2 rounded-t-lg border-x-4 border-t-4"
+        style={{
+          maxWidth: 800,
+          background: "linear-gradient(180deg, hsl(30 18% 16%) 0%, hsl(25 15% 12%) 100%)",
+          borderColor: "hsl(30 30% 22%)",
+        }}
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold" style={{ color: "hsl(210 60% 65%)", fontFamily: "Cinzel, serif" }}>Blue</span>
+          <GoldDisplay gold={blueGold} />
+        </div>
+        <span
+          className="text-sm font-bold uppercase tracking-widest"
+          style={{ color: "hsl(40 30% 50%)", fontFamily: "MedievalSharp, cursive" }}
+        >
+          Tiny Battle
+        </span>
+        <div className="flex items-center gap-2">
+          <GoldDisplay gold={redGold} />
+          <span className="text-xs font-bold" style={{ color: "hsl(0 60% 65%)", fontFamily: "Cinzel, serif" }}>Red</span>
+        </div>
+      </div>
+
+      {/* Battlefield */}
+      <div
+        className="overflow-hidden border-x-4"
         style={{ borderColor: "hsl(30 30% 22%)" }}
       >
         <div ref={containerRef} />
       </div>
+
+      {/* Control bar */}
       <div
         className="flex items-center justify-center gap-4 px-6 py-3 rounded-b-lg border-x-4 border-b-4"
         style={{
@@ -452,15 +524,12 @@ const PhaserGame = () => {
         }}
       >
         <UnitSelector selected={selectedUnit} onSelect={handleUnitSelect} />
-        <div
-          className="w-px self-stretch mx-1"
-          style={{ background: "hsl(30 15% 28%)" }}
-        />
-        <MedievalButton variant="blue" onClick={handleStart}>
-          ⚔ Start Battle
+        <div className="w-px self-stretch mx-1" style={{ background: "hsl(30 15% 28%)" }} />
+        <MedievalButton variant="blue" onClick={handleStart} icon="/assets/Icon_Sword.png">
+          Battle
         </MedievalButton>
-        <MedievalButton variant="red" onClick={handleClear}>
-          ✕ Clear
+        <MedievalButton variant="red" onClick={handleClear} icon="/assets/Icon_Cross.png">
+          Clear
         </MedievalButton>
       </div>
     </div>

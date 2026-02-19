@@ -5,9 +5,10 @@ interface MedievalButtonProps {
   children: React.ReactNode;
   variant: "blue" | "red";
   className?: string;
+  icon?: string;
 }
 
-const MedievalButton: React.FC<MedievalButtonProps> = ({ onClick, children, variant, className = "" }) => {
+const MedievalButton: React.FC<MedievalButtonProps> = ({ onClick, children, variant, className = "", icon }) => {
   const [pressed, setPressed] = useState(false);
 
   const regular = variant === "blue"
@@ -29,8 +30,9 @@ const MedievalButton: React.FC<MedievalButtonProps> = ({ onClick, children, vari
         background: "none",
         padding: 0,
         cursor: "pointer",
-        minWidth: 120,
+        minWidth: 130,
         minHeight: 44,
+        fontFamily: "Cinzel, serif",
       }}
     >
       <img
@@ -40,18 +42,20 @@ const MedievalButton: React.FC<MedievalButtonProps> = ({ onClick, children, vari
         className="absolute inset-0 w-full h-full pointer-events-none"
         style={{
           imageRendering: "pixelated",
-          borderImageSlice: "30% fill",
           objectFit: "fill",
         }}
       />
       <span
-        className="relative z-10 px-5 py-2.5 block"
+        className="relative z-10 px-5 py-2.5 flex items-center justify-center gap-1.5"
         style={{
           color: variant === "blue" ? "hsl(200 20% 95%)" : "hsl(0 20% 95%)",
           textShadow: "0 1px 3px rgba(0,0,0,0.7)",
           transform: pressed ? "translateY(1px)" : "none",
         }}
       >
+        {icon && (
+          <img src={icon} alt="" className="w-4 h-4" style={{ imageRendering: "pixelated" }} draggable={false} />
+        )}
         {children}
       </span>
     </button>
