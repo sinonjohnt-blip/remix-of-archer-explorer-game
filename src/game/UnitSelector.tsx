@@ -7,9 +7,9 @@ interface UnitSelectorProps {
   onSelect: (type: UnitType) => void;
 }
 
-const units: { type: UnitType; label: string; icon: string }[] = [
-  { type: "archer", label: "Archer", icon: "🏹" },
-  { type: "knight", label: "Knight", icon: "⚔" },
+const units: { type: UnitType; label: string; icon: string; cost: number }[] = [
+  { type: "archer", label: "Archer", icon: "/assets/Arrow.png", cost: 50 },
+  { type: "knight", label: "Knight", icon: "/assets/Icon_Sword.png", cost: 80 },
 ];
 
 const UnitSelector: React.FC<UnitSelectorProps> = ({ selected, onSelect }) => {
@@ -17,7 +17,7 @@ const UnitSelector: React.FC<UnitSelectorProps> = ({ selected, onSelect }) => {
     <div className="flex gap-2 items-center">
       <span
         className="text-xs font-bold uppercase tracking-widest mr-1"
-        style={{ color: "hsl(40 30% 60%)" }}
+        style={{ color: "hsl(40 30% 60%)", fontFamily: "Cinzel, serif" }}
       >
         Unit
       </span>
@@ -51,15 +51,29 @@ const UnitSelector: React.FC<UnitSelectorProps> = ({ selected, onSelect }) => {
                 transition: "all 0.1s",
               }}
             >
-              <span className="text-lg leading-none">{u.icon}</span>
+              <img
+                src={u.icon}
+                alt={u.label}
+                className="w-6 h-6"
+                style={{ imageRendering: "pixelated" }}
+                draggable={false}
+              />
               <span
                 className="text-[10px] font-bold mt-0.5"
                 style={{
                   color: isActive ? "hsl(45 60% 80%)" : "hsl(30 10% 55%)",
                   textShadow: "0 1px 2px rgba(0,0,0,0.5)",
+                  fontFamily: "Cinzel, serif",
                 }}
               >
                 {u.label}
+              </span>
+              <span
+                className="flex items-center gap-0.5 text-[9px] mt-0.5"
+                style={{ color: "hsl(45 70% 60%)" }}
+              >
+                <img src="/assets/Icon_Gold.png" alt="gold" className="w-3 h-3" style={{ imageRendering: "pixelated" }} />
+                {u.cost}
               </span>
             </div>
           </button>
