@@ -5,7 +5,7 @@ interface ArrowProjectile {
   sprite: Phaser.GameObjects.Sprite;
   vx: number;
   vy: number;
-  targetX: number;
+  gravity: number;
   damage: number;
   targetArcher: ArcherData;
 }
@@ -72,14 +72,14 @@ class MainScene extends Phaser.Scene {
     });
 
     // Archer A (left side)
-    const spriteA = this.add.sprite(80, 350, "idle");
-    spriteA.setScale(2);
+    const spriteA = this.add.sprite(80, 400, "idle");
+    spriteA.setScale(1.2);
     spriteA.setFlipX(false);
     spriteA.play("archer-run");
 
     // Archer B (right side)
-    const spriteB = this.add.sprite(720, 350, "idle");
-    spriteB.setScale(2);
+    const spriteB = this.add.sprite(720, 400, "idle");
+    spriteB.setScale(1.2);
     spriteB.setFlipX(true);
     spriteB.play("archer-run");
 
@@ -88,7 +88,7 @@ class MainScene extends Phaser.Scene {
       hp: 100,
       maxHp: 100,
       damage: 15,
-      attackRange: 350,
+      attackRange: 500,
       dead: false,
       attacking: false,
       direction: 1,
@@ -100,7 +100,7 @@ class MainScene extends Phaser.Scene {
       hp: 100,
       maxHp: 100,
       damage: 12,
-      attackRange: 350,
+      attackRange: 500,
       dead: false,
       attacking: false,
       direction: -1,
@@ -131,23 +131,20 @@ class MainScene extends Phaser.Scene {
   }
 
   spawnArrow(attacker: ArcherData, target: ArcherData) {
-    const arrowSprite = this.add.sprite(attacker.sprite.x, attacker.sprite.y - 40, "arrow");
-    arrowSprite.setScale(1.5);
+    const arrowSprite = this.add.sprite(attacker.sprite.x, attacker.sprite.y - 50, "arrow");
+    arrowSprite.setScale(0.8);
 
     // Capture target position once
     const targetX = target.sprite.x;
-    const targetY = target.sprite.y - 40;
     const dx = targetX - arrowSprite.x;
-    const dy = targetY - arrowSprite.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    const speed = 300;
-    const vx = (dx / dist) * speed;
-    const vy = (dy / dist) * speed;
+    const dist = Math.abs(dx);
+    const gravity = 400;
+    const flightTime = dist / 250; // estimated time to reach target
+    const vx = dx / flightTime;
+    const vy = -(gravity * flightTime) / 2; // launch upward so arc peaks mid-flight
 
-    // Rotate arrow to face direction
-    arrowSprite.setRotation(Math.atan2(dy, dx));
-
-    // Flip arrow sprite if going left
+    // Rotate arrow to initial direction
+    arrowSprite.setRotation(Math.atan2(vy, vx));
     if (dx < 0) {
       arrowSprite.setFlipY(true);
     }
@@ -156,7 +153,7 @@ class MainScene extends Phaser.Scene {
       sprite: arrowSprite,
       vx,
       vy,
-      targetX,
+      gravity,
       damage: attacker.damage,
       targetArcher: target,
     });
@@ -235,18 +232,22 @@ class MainScene extends Phaser.Scene {
     const dt = delta / 1000;
     for (let i = this.arrows.length - 1; i >= 0; i--) {
       const arrow = this.arrows[i];
+      arrow.vy += arrow.gravity * dt; // apply gravity
       arrow.sprite.x += arrow.vx * dt;
       arrow.sprite.y += arrow.vy * dt;
 
-      // Check collision with target (within 30px)
+      // Rotate arrow to match current velocity
+      arrow.sprite.setRotation(Math.atan2(arrow.vy, arrow.vx));
+
+      // Check collision with target (within 35px)
       const target = arrow.targetArcher;
       const adx = arrow.sprite.x - target.sprite.x;
-      const ady = arrow.sprite.y - (target.sprite.y - 40);
+      const ady = arrow.sprite.y - (target.sprite.y - 30);
       const adist = Math.sqrt(adx * adx + ady * ady);
 
       // Hit or out of bounds
-      if (adist < 30 || arrow.sprite.x < -50 || arrow.sprite.x > 850) {
-        if (adist < 30 && !target.dead) {
+      if (adist < 35 || arrow.sprite.x < -50 || arrow.sprite.x > 850 || arrow.sprite.y > 600) {
+        if (adist < 35 && !target.dead) {
           target.hp -= arrow.damage;
           if (target.hp <= 0) {
             target.hp = 0;
@@ -288,7 +289,23 @@ const PhaserGame = () => {
     };
   }, []);
 
-  return <div ref={containerRef} className="flex items-center justify-center min-h-screen bg-background" />;
+  const handleRestart = () => {
+    if (gameRef.current) {
+      gameRef.current.scene.getScene("MainScene")?.scene.restart();
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-background gap-4">
+      <div ref={containerRef} />
+      <button
+        onClick={handleRestart}
+        className="px-6 py-2 bg-primary text-primary-foreground rounded-md font-semibold hover:opacity-90 transition-opacity"
+      >
+        Restart Battle
+      </button>
+    </div>
+  );
 };
 
 export default PhaserGame;
