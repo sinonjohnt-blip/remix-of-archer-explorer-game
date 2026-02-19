@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import Phaser from "phaser";
+import MedievalButton from "./MedievalButton";
+import UnitSelector, { type UnitType } from "./UnitSelector";
 
 interface ArrowProjectile {
   sprite: Phaser.GameObjects.Sprite;
@@ -22,6 +24,7 @@ interface ArcherData {
   direction: number;
   hpBar: Phaser.GameObjects.Graphics;
   teamColor: number;
+  unitType: UnitType;
 }
 
 class MainScene extends Phaser.Scene {
@@ -29,6 +32,7 @@ class MainScene extends Phaser.Scene {
   private teamRed: ArcherData[] = [];
   private arrows: ArrowProjectile[] = [];
   private battleStarted = false;
+  public selectedUnitType: UnitType = "archer";
   private dividerLine!: Phaser.GameObjects.Graphics;
   private placementText!: Phaser.GameObjects.Text;
 
@@ -98,13 +102,19 @@ class MainScene extends Phaser.Scene {
       if (this.battleStarted) return;
       const x = pointer.x;
       const y = pointer.y;
+      const unitType = this.selectedUnitType;
+      const isKnight = unitType === "knight";
+      const hp = isKnight ? 180 : 100;
+      const damage = isKnight ? 8 : 15;
+      const range = isKnight ? 120 : 500;
+      const scale = isKnight ? 0.9 : 0.85;
 
       if (x < 400) {
-        const archer = this.createArcher(x, y, 1, false, 0x3399ff, 15);
-        this.teamBlue.push(archer);
+        const unit = this.createArcher(x, y, 1, false, 0x3399ff, damage, unitType, hp, range, scale);
+        this.teamBlue.push(unit);
       } else {
-        const archer = this.createArcher(x, y, -1, true, 0xff4455, 12);
-        this.teamRed.push(archer);
+        const unit = this.createArcher(x, y, -1, true, 0xff4455, damage, unitType, hp, range, scale);
+        this.teamRed.push(unit);
       }
     });
   }
@@ -135,24 +145,30 @@ class MainScene extends Phaser.Scene {
     this.placementText.setVisible(true);
   }
 
-  createArcher(x: number, y: number, direction: number, flipX: boolean, teamColor: number, damage: number): ArcherData {
+  createArcher(x: number, y: number, direction: number, flipX: boolean, teamColor: number, damage: number, unitType: UnitType = "archer", hp: number = 100, attackRange: number = 500, scale: number = 0.85): ArcherData {
     const sprite = this.add.sprite(x, y, "idle");
-    sprite.setScale(0.85);
+    sprite.setScale(scale);
     sprite.setFlipX(flipX);
     sprite.play("archer-idle");
 
+    // Tint knights slightly to distinguish them
+    if (unitType === "knight") {
+      sprite.setTint(teamColor === 0x3399ff ? 0xaaccff : 0xffaaaa);
+    }
+
     const archer: ArcherData = {
       sprite,
-      hp: 100,
-      maxHp: 100,
-      displayHp: 100,
+      hp,
+      maxHp: hp,
+      displayHp: hp,
       damage,
-      attackRange: 500,
+      attackRange,
       dead: false,
       attacking: false,
       direction,
       hpBar: this.add.graphics(),
       teamColor,
+      unitType,
     };
 
     // On shoot complete, fire arrow and continue if target alive
@@ -383,6 +399,7 @@ class MainScene extends Phaser.Scene {
 const PhaserGame = () => {
   const gameRef = useRef<Phaser.Game | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [selectedUnit, setSelectedUnit] = useState<UnitType>("archer");
 
   useEffect(() => {
     if (gameRef.current || !containerRef.current) return;
@@ -403,54 +420,48 @@ const PhaserGame = () => {
     };
   }, []);
 
-  const getScene = (): MainScene | null => {
+  const getScene = useCallback((): MainScene | null => {
     return gameRef.current?.scene.getScene("MainScene") as MainScene | null;
-  };
+  }, []);
 
-  const handleStart = () => getScene()?.startBattle();
-  const handleClear = () => getScene()?.clearAll();
+  const handleStart = useCallback(() => getScene()?.startBattle(), [getScene]);
+  const handleClear = useCallback(() => getScene()?.clearAll(), [getScene]);
+
+  const handleUnitSelect = useCallback((type: UnitType) => {
+    setSelectedUnit(type);
+    const scene = getScene();
+    if (scene) scene.selectedUnitType = type;
+  }, [getScene]);
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen gap-0"
+    <div
+      className="flex flex-col items-center justify-center min-h-screen gap-0"
       style={{ background: "linear-gradient(180deg, hsl(30 20% 15%) 0%, hsl(25 25% 10%) 100%)" }}
     >
-      <div className="rounded-t-lg overflow-hidden border-x-4 border-t-4"
+      <div
+        className="rounded-t-lg overflow-hidden border-x-4 border-t-4"
         style={{ borderColor: "hsl(30 30% 22%)" }}
       >
         <div ref={containerRef} />
       </div>
-      <div className="flex gap-3 px-8 py-3 rounded-b-lg border-x-4 border-b-4"
+      <div
+        className="flex items-center justify-center gap-4 px-6 py-3 rounded-b-lg border-x-4 border-b-4"
         style={{
           background: "linear-gradient(180deg, hsl(30 20% 18%) 0%, hsl(25 18% 12%) 100%)",
           borderColor: "hsl(30 30% 22%)",
         }}
       >
-        <button
-          onClick={handleStart}
-          className="px-6 py-2.5 rounded font-bold text-sm tracking-wide transition-all hover:brightness-110 active:scale-95"
-          style={{
-            background: "linear-gradient(180deg, hsl(45 60% 45%) 0%, hsl(35 50% 30%) 100%)",
-            color: "hsl(40 30% 95%)",
-            border: "2px solid hsl(40 40% 25%)",
-            textShadow: "0 1px 2px rgba(0,0,0,0.5)",
-            boxShadow: "0 2px 6px rgba(0,0,0,0.4), inset 0 1px 0 hsla(45,80%,70%,0.3)",
-          }}
-        >
+        <UnitSelector selected={selectedUnit} onSelect={handleUnitSelect} />
+        <div
+          className="w-px self-stretch mx-1"
+          style={{ background: "hsl(30 15% 28%)" }}
+        />
+        <MedievalButton variant="blue" onClick={handleStart}>
           ⚔ Start Battle
-        </button>
-        <button
-          onClick={handleClear}
-          className="px-6 py-2.5 rounded font-bold text-sm tracking-wide transition-all hover:brightness-110 active:scale-95"
-          style={{
-            background: "linear-gradient(180deg, hsl(0 30% 35%) 0%, hsl(0 25% 22%) 100%)",
-            color: "hsl(0 20% 85%)",
-            border: "2px solid hsl(0 20% 18%)",
-            textShadow: "0 1px 2px rgba(0,0,0,0.5)",
-            boxShadow: "0 2px 6px rgba(0,0,0,0.4), inset 0 1px 0 hsla(0,30%,50%,0.2)",
-          }}
-        >
+        </MedievalButton>
+        <MedievalButton variant="red" onClick={handleClear}>
           ✕ Clear
-        </button>
+        </MedievalButton>
       </div>
     </div>
   );
