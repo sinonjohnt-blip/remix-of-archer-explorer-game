@@ -137,7 +137,7 @@ class MainScene extends Phaser.Scene {
 
   createArcher(x: number, y: number, direction: number, flipX: boolean, teamColor: number, damage: number): ArcherData {
     const sprite = this.add.sprite(x, y, "idle");
-    sprite.setScale(1.2);
+    sprite.setScale(0.85);
     sprite.setFlipX(flipX);
     sprite.play("archer-idle");
 
@@ -193,7 +193,7 @@ class MainScene extends Phaser.Scene {
 
   spawnArrow(attacker: ArcherData, target: ArcherData) {
     const arrowSprite = this.add.sprite(attacker.sprite.x, attacker.sprite.y - 50, "arrow");
-    arrowSprite.setScale(0.8);
+    arrowSprite.setScale(0.55);
 
     const targetX = target.sprite.x;
     const targetY = target.sprite.y - 20;
@@ -266,10 +266,10 @@ class MainScene extends Phaser.Scene {
 
     const g = archer.hpBar;
     g.clear();
-    const barWidth = 50;
-    const barHeight = 5;
+    const barWidth = 40;
+    const barHeight = 4;
     const x = archer.sprite.x - barWidth / 2;
-    const y = archer.sprite.y - 90;
+    const y = archer.sprite.y - 65;
 
     g.fillStyle(0x1a1a2e, 0.9);
     g.fillRoundedRect(x - 1, y - 1, barWidth + 2, barHeight + 2, 2);
@@ -392,7 +392,7 @@ const PhaserGame = () => {
       width: 800,
       height: 600,
       parent: containerRef.current,
-      backgroundColor: "#8fbc8f",
+      backgroundColor: "#4a6741",
       scene: MainScene,
       pixelArt: true,
     });
@@ -411,20 +411,45 @@ const PhaserGame = () => {
   const handleClear = () => getScene()?.clearAll();
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-background gap-4">
-      <div ref={containerRef} />
-      <div className="flex gap-3">
+    <div className="flex flex-col items-center justify-center min-h-screen gap-0"
+      style={{ background: "linear-gradient(180deg, hsl(30 20% 15%) 0%, hsl(25 25% 10%) 100%)" }}
+    >
+      <div className="rounded-t-lg overflow-hidden border-x-4 border-t-4"
+        style={{ borderColor: "hsl(30 30% 22%)" }}
+      >
+        <div ref={containerRef} />
+      </div>
+      <div className="flex gap-3 px-8 py-3 rounded-b-lg border-x-4 border-b-4"
+        style={{
+          background: "linear-gradient(180deg, hsl(30 20% 18%) 0%, hsl(25 18% 12%) 100%)",
+          borderColor: "hsl(30 30% 22%)",
+        }}
+      >
         <button
           onClick={handleStart}
-          className="px-6 py-2 bg-primary text-primary-foreground rounded-md font-semibold hover:opacity-90 transition-opacity"
+          className="px-6 py-2.5 rounded font-bold text-sm tracking-wide transition-all hover:brightness-110 active:scale-95"
+          style={{
+            background: "linear-gradient(180deg, hsl(45 60% 45%) 0%, hsl(35 50% 30%) 100%)",
+            color: "hsl(40 30% 95%)",
+            border: "2px solid hsl(40 40% 25%)",
+            textShadow: "0 1px 2px rgba(0,0,0,0.5)",
+            boxShadow: "0 2px 6px rgba(0,0,0,0.4), inset 0 1px 0 hsla(45,80%,70%,0.3)",
+          }}
         >
-          Start Battle
+          ⚔ Start Battle
         </button>
         <button
           onClick={handleClear}
-          className="px-6 py-2 bg-destructive text-destructive-foreground rounded-md font-semibold hover:opacity-90 transition-opacity"
+          className="px-6 py-2.5 rounded font-bold text-sm tracking-wide transition-all hover:brightness-110 active:scale-95"
+          style={{
+            background: "linear-gradient(180deg, hsl(0 30% 35%) 0%, hsl(0 25% 22%) 100%)",
+            color: "hsl(0 20% 85%)",
+            border: "2px solid hsl(0 20% 18%)",
+            textShadow: "0 1px 2px rgba(0,0,0,0.5)",
+            boxShadow: "0 2px 6px rgba(0,0,0,0.4), inset 0 1px 0 hsla(0,30%,50%,0.2)",
+          }}
         >
-          Clear
+          ✕ Clear
         </button>
       </div>
     </div>
