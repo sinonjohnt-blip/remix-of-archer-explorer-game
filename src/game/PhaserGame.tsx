@@ -14,12 +14,14 @@ interface ArcherData {
   sprite: Phaser.GameObjects.Sprite;
   hp: number;
   maxHp: number;
+  displayHp: number;
   damage: number;
   attackRange: number;
   dead: boolean;
   attacking: boolean;
   direction: number;
   hpBar: Phaser.GameObjects.Graphics;
+  teamColor: number;
 }
 
 class MainScene extends Phaser.Scene {
@@ -87,24 +89,28 @@ class MainScene extends Phaser.Scene {
       sprite: spriteA,
       hp: 100,
       maxHp: 100,
+      displayHp: 100,
       damage: 15,
       attackRange: 500,
       dead: false,
       attacking: false,
       direction: 1,
       hpBar: this.add.graphics(),
+      teamColor: 0x3399ff,
     };
 
     this.archerB = {
       sprite: spriteB,
       hp: 100,
       maxHp: 100,
+      displayHp: 100,
       damage: 12,
       attackRange: 500,
       dead: false,
       attacking: false,
       direction: -1,
       hpBar: this.add.graphics(),
+      teamColor: 0xff4455,
     };
 
     // On shoot complete, spawn arrow and loop
@@ -179,20 +185,67 @@ class MainScene extends Phaser.Scene {
     });
   }
 
+  applyHitFeedback(archer: ArcherData, arrowVx: number) {
+    archer.sprite.setTint(0xffffff);
+    this.time.delayedCall(120, () => {
+      if (!archer.dead) archer.sprite.clearTint();
+    });
+
+    const knockbackDir = arrowVx > 0 ? 1 : -1;
+    const originalX = archer.sprite.x;
+    this.tweens.add({
+      targets: archer.sprite,
+      x: originalX + knockbackDir * 8,
+      duration: 60,
+      yoyo: true,
+      ease: "Power1",
+    });
+
+    const originalY = archer.sprite.y;
+    this.tweens.add({
+      targets: archer.sprite,
+      y: originalY - 3,
+      duration: 40,
+      yoyo: true,
+      repeat: 1,
+      ease: "Sine.easeInOut",
+    });
+  }
+
   drawHpBar(archer: ArcherData) {
+    archer.displayHp += (archer.hp - archer.displayHp) * 0.08;
+    if (Math.abs(archer.displayHp - archer.hp) < 0.5) archer.displayHp = archer.hp;
+
     const g = archer.hpBar;
     g.clear();
-    const barWidth = 60;
-    const barHeight = 6;
+    const barWidth = 50;
+    const barHeight = 5;
     const x = archer.sprite.x - barWidth / 2;
-    const y = archer.sprite.y - 100;
+    const y = archer.sprite.y - 90;
 
-    g.fillStyle(0x333333);
-    g.fillRect(x, y, barWidth, barHeight);
-    const ratio = archer.hp / archer.maxHp;
-    const color = ratio > 0.5 ? 0x00cc00 : ratio > 0.25 ? 0xcccc00 : 0xcc0000;
-    g.fillStyle(color);
-    g.fillRect(x, y, barWidth * ratio, barHeight);
+    // Dark border
+    g.fillStyle(0x1a1a2e, 0.9);
+    g.fillRoundedRect(x - 1, y - 1, barWidth + 2, barHeight + 2, 2);
+
+    // Background track
+    g.fillStyle(0x333344, 1);
+    g.fillRoundedRect(x, y, barWidth, barHeight, 2);
+
+    // Damage ghost bar
+    const displayRatio = archer.displayHp / archer.maxHp;
+    const actualRatio = archer.hp / archer.maxHp;
+    if (displayRatio > actualRatio) {
+      g.fillStyle(0x994444, 0.6);
+      g.fillRoundedRect(x, y, barWidth * displayRatio, barHeight, 2);
+    }
+
+    // Team-colored HP fill
+    g.fillStyle(archer.teamColor, 1);
+    g.fillRoundedRect(x, y, barWidth * actualRatio, barHeight, 2);
+
+    // Subtle highlight
+    g.fillStyle(0xffffff, 0.15);
+    g.fillRect(x + 1, y, Math.max(0, barWidth * actualRatio - 2), barHeight / 2);
   }
 
   update(_time: number, delta: number) {
@@ -239,21 +292,21 @@ class MainScene extends Phaser.Scene {
       // Rotate arrow to match current velocity
       arrow.sprite.setRotation(Math.atan2(arrow.vy, arrow.vx));
 
-      // Check collision with target (within 35px)
+      // Tighter hitbox centered on body
       const target = arrow.targetArcher;
       const adx = arrow.sprite.x - target.sprite.x;
-      const ady = arrow.sprite.y - (target.sprite.y - 30);
+      const ady = arrow.sprite.y - (target.sprite.y - 20);
       const adist = Math.sqrt(adx * adx + ady * ady);
+      const hitRadius = 25;
 
-      // Hit or out of bounds
-      if (adist < 35 || arrow.sprite.x < -50 || arrow.sprite.x > 850 || arrow.sprite.y > 600) {
-        if (adist < 35 && !target.dead) {
+      if (adist < hitRadius || arrow.sprite.x < -50 || arrow.sprite.x > 850 || arrow.sprite.y > 600) {
+        if (adist < hitRadius && !target.dead) {
           target.hp -= arrow.damage;
+          this.applyHitFeedback(target, arrow.vx);
           if (target.hp <= 0) {
             target.hp = 0;
             this.applyDeath(target);
           }
-          this.drawHpBar(target);
         }
         arrow.sprite.destroy();
         this.arrows.splice(i, 1);
