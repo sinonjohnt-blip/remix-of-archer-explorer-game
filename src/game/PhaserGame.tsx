@@ -6,7 +6,7 @@ import GoldDisplay from "./GoldDisplay";
 import { MainScene } from "./scenes/MainScene";
 import type { UnitType } from "./types";
 
-const UNIT_COSTS: Record<UnitType, number> = { archer: 50, warrior: 80 };
+const UNIT_COSTS: Record<UnitType, number> = { archer: 50, warrior: 80, lancer: 100 };
 const STARTING_GOLD = 500;
 
 const PhaserGame = () => {
