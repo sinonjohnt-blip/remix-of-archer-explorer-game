@@ -121,10 +121,10 @@ const PhaserGame = () => {
       >
         <UnitSelector selected={selectedUnit} onSelect={handleUnitSelect} />
         <div className="w-px self-stretch mx-1" style={{ background: "hsl(30 15% 28%)" }} />
-        <MedievalButton variant="blue" onClick={handleStart} icon="/assets/Icon_Sword.png">
+        <MedievalButton variant="blue" onClick={handleStart} icon="/assets/Icon_Sword.png" size={72}>
           Battle
         </MedievalButton>
-        <MedievalButton variant="red" onClick={handleClear} icon="/assets/Icon_Cross.png">
+        <MedievalButton variant="red" onClick={handleClear} icon="/assets/Icon_Cross.png" size={72}>
           Clear
         </MedievalButton>
       </div>
