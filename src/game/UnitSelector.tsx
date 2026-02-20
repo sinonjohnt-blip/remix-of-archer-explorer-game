@@ -1,6 +1,7 @@
 import React from "react";
+import type { UnitType } from "./types";
 
-export type UnitType = "archer" | "knight";
+export type { UnitType };
 
 interface UnitSelectorProps {
   selected: UnitType;
@@ -8,8 +9,8 @@ interface UnitSelectorProps {
 }
 
 const units: { type: UnitType; label: string; icon: string; cost: number }[] = [
-  { type: "archer", label: "Archer", icon: "/assets/Arrow.png", cost: 50 },
-  { type: "knight", label: "Knight", icon: "/assets/Icon_Sword.png", cost: 80 },
+  { type: "archer",  label: "Archer",  icon: "/assets/Arrow.png",      cost: 50 },
+  { type: "warrior", label: "Warrior", icon: "/assets/Icon_Sword.png",  cost: 80 },
 ];
 
 const UnitSelector: React.FC<UnitSelectorProps> = ({ selected, onSelect }) => {
@@ -28,12 +29,7 @@ const UnitSelector: React.FC<UnitSelectorProps> = ({ selected, onSelect }) => {
             key={u.type}
             onClick={() => onSelect(u.type)}
             className="relative transition-all duration-100 select-none"
-            style={{
-              border: "none",
-              background: "none",
-              padding: 0,
-              cursor: "pointer",
-            }}
+            style={{ border: "none", background: "none", padding: 0, cursor: "pointer" }}
           >
             <div
               className="flex flex-col items-center justify-center px-3 py-1.5 rounded"
@@ -45,7 +41,7 @@ const UnitSelector: React.FC<UnitSelectorProps> = ({ selected, onSelect }) => {
                   ? "2px solid hsl(45 60% 50%)"
                   : "2px solid hsl(30 15% 28%)",
                 boxShadow: isActive
-                  ? "0 0 8px hsla(45, 60%, 50%, 0.4), inset 0 1px 0 hsla(45,80%,70%,0.2)"
+                  ? "0 0 8px hsla(45,60%,50%,0.4), inset 0 1px 0 hsla(45,80%,70%,0.2)"
                   : "inset 0 1px 0 hsla(0,0%,100%,0.05)",
                 transform: isActive ? "scale(1.08)" : "scale(1)",
                 transition: "all 0.1s",
