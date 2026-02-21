@@ -13,6 +13,7 @@ const UNIT_COSTS: Record<UnitType, number> = { archer: 50, warrior: 80, lancer: 
 // ── Sprite sheet frame sizes ───────────────────────────────────────────────────
 const ARCHER_FRAME  = 192;
 const WARRIOR_FRAME = 192;
+const MONK_FRAME    = 192;
 const LANCER_IDLE_FRAME = 160;
 const LANCER_FRAME = 320;
 
@@ -87,8 +88,8 @@ const MONK_CAST_DELAY       = 400;  // ms before heal applies
 function monkAbilities(): UnitAbilities {
   return {
     resolveAttack: () => [],        // monk never deals damage
-    cooldownAnim:  () => "warrior-guard",
-    attackAnim:    () => "warrior-guard", // not used but required by interface
+    cooldownAnim:  () => "monk-idle",
+    attackAnim:    () => "monk-heal", // not used for combat but required by interface
   };
 }
 
@@ -123,6 +124,12 @@ export class MainScene extends Phaser.Scene {
     this.load.spritesheet("w-attack1", "/assets/Warrior_Attack1.png", { frameWidth: WARRIOR_FRAME, frameHeight: WARRIOR_FRAME });
     this.load.spritesheet("w-attack2", "/assets/Warrior_Attack2.png", { frameWidth: WARRIOR_FRAME, frameHeight: WARRIOR_FRAME });
     this.load.spritesheet("w-guard",   "/assets/Warrior_Guard.png",   { frameWidth: WARRIOR_FRAME, frameHeight: WARRIOR_FRAME });
+
+    // Monk
+    this.load.spritesheet("m-idle",        "/assets/Monk_Idle.png",        { frameWidth: MONK_FRAME, frameHeight: MONK_FRAME });
+    this.load.spritesheet("m-run",         "/assets/Monk_Run.png",         { frameWidth: MONK_FRAME, frameHeight: MONK_FRAME });
+    this.load.spritesheet("m-heal",        "/assets/Monk_Heal.png",        { frameWidth: MONK_FRAME, frameHeight: MONK_FRAME });
+    this.load.spritesheet("m-heal-effect", "/assets/Monk_Heal_Effect.png", { frameWidth: MONK_FRAME, frameHeight: MONK_FRAME });
 
     // Lancer — all directions
     this.load.spritesheet("l-idle",             "/assets/Lancer_Idle.png",             { frameWidth: LANCER_IDLE_FRAME, frameHeight: LANCER_IDLE_FRAME });
@@ -309,6 +316,12 @@ export class MainScene extends Phaser.Scene {
     def("lancer-upright-guard",    "l-upright-guard",    0, 5,  8);
     def("lancer-downright-attack", "l-downright-attack", 0, 2,  10, 0);
     def("lancer-downright-guard",  "l-downright-guard",  0, 5,  8);
+
+    // Monk
+    def("monk-idle",        "m-idle",        0, 5);
+    def("monk-run",         "m-run",         0, 3);
+    def("monk-heal",        "m-heal",        0, 11, 8, 0);
+    def("monk-heal-effect", "m-heal-effect", 0, 11, 8, 0);
   }
 
   // ── Spawn unit ────────────────────────────────────────────────────────────
@@ -335,20 +348,15 @@ export class MainScene extends Phaser.Scene {
         idleAnim = "lancer-idle"; abilities = lancerAbilities(); break;
       case "monk":
         hp = 80; damage = 0; attackRangeCells = 0; speed = 0.8; attackDuration = 800;
-        idleAnim = "warrior-idle"; abilities = monkAbilities(); break;
+        idleAnim = "monk-idle"; abilities = monkAbilities(); break;
     }
 
-    const texKey = unitType === "archer" ? "idle" : unitType === "warrior" ? "w-idle" : unitType === "monk" ? "w-idle" : "l-idle";
+    const texKey = unitType === "archer" ? "idle" : unitType === "warrior" ? "w-idle" : unitType === "monk" ? "m-idle" : "l-idle";
     const sprite = this.add.sprite(cell.worldX, cell.worldY, texKey);
     sprite.setScale(scale);
     sprite.setFlipX(flipX);
     sprite.play(idleAnim);
     sprite.setDepth(10 + cell.row);
-
-    // Monk gets a green tint to distinguish from warrior
-    if (unitType === "monk") {
-      sprite.setTint(isBlue ? 0x66ff99 : 0xff9966);
-    }
 
     const meleeRange = attackRangeCells * CELL_W + CELL_W * 0.4;
 
@@ -458,31 +466,24 @@ export class MainScene extends Phaser.Scene {
     switch (next) {
       case "idle":
         setLancerScale(true);
-        if (unit.unitType === "monk") {
-          unit.sprite.play("warrior-idle", true);
-        } else {
-          unit.sprite.play(
-            unit.unitType === "archer" ? "archer-idle" :
-            unit.unitType === "warrior" ? "warrior-idle" : "lancer-idle", true);
-        }
+        unit.sprite.play(
+          unit.unitType === "monk" ? "monk-idle" :
+          unit.unitType === "archer" ? "archer-idle" :
+          unit.unitType === "warrior" ? "warrior-idle" : "lancer-idle", true);
         break;
       case "moving":
         setLancerScale(false);
-        if (unit.unitType === "monk") {
-          unit.sprite.play("warrior-run", true);
-        } else {
-          unit.sprite.play(
-            unit.unitType === "archer" ? "archer-run" :
-            unit.unitType === "warrior" ? "warrior-run" : "lancer-run", true);
-        }
+        unit.sprite.play(
+          unit.unitType === "monk" ? "monk-run" :
+          unit.unitType === "archer" ? "archer-run" :
+          unit.unitType === "warrior" ? "warrior-run" : "lancer-run", true);
         break;
       case "attacking":
         setLancerScale(false);
         unit.sprite.play(unit.abilities.attackAnim(unit), true);
         break;
       case "healing":
-        // Monk heal cast animation — use warrior attack1 anim
-        unit.sprite.play("warrior-attack1", true);
+        unit.sprite.play("monk-heal", true);
         break;
       case "cooldown":
         setLancerScale(false);
@@ -737,7 +738,7 @@ export class MainScene extends Phaser.Scene {
       // Begin healing cast
       this.setState(unit, "healing");
 
-      // After cast delay, apply heal
+      // Spawn heal effect on target after cast delay
       this.time.delayedCall(MONK_CAST_DELAY, () => {
         if (unit.state === "dead" || !bestTarget || bestTarget.state === "dead") {
           if (unit.state !== "dead") this.setState(unit, "idle");
@@ -745,24 +746,17 @@ export class MainScene extends Phaser.Scene {
         }
         // Apply heal
         bestTarget.hp = Math.min(bestTarget.maxHp, bestTarget.hp + MONK_HEAL_AMOUNT);
-        // Green flash on healed unit
-        bestTarget.sprite.setTint(0x44ff44);
-        this.time.delayedCall(200, () => {
-          if (bestTarget!.state !== "dead") {
-            // Restore monk tint or clear
-            if (bestTarget!.unitType === "monk") {
-              bestTarget!.sprite.setTint(bestTarget!.team === "blue" ? 0x66ff99 : 0xff9966);
-            } else {
-              bestTarget!.sprite.clearTint();
-            }
-          }
-        });
+
+        // Spawn heal effect sprite on target position
+        const fx = this.add.sprite(bestTarget.sprite.x, bestTarget.sprite.y, "m-heal-effect")
+          .setScale(SPRITE_SCALE["monk"])
+          .setDepth(55);
+        fx.play("monk-heal-effect");
+        fx.once("animationcomplete", () => fx.destroy());
 
         // Enter cooldown
         this.setState(unit, "cooldown");
         unit.cooldownTimer = MONK_HEAL_COOLDOWN;
-        // Re-apply monk tint after healing anim
-        unit.sprite.setTint(unit.team === "blue" ? 0x66ff99 : 0xff9966);
       });
     } else {
       // No injured ally in range — check if any injured ally exists to move toward
@@ -777,12 +771,8 @@ export class MainScene extends Phaser.Scene {
       if (nearestInjured && minDist > MONK_HEAL_RANGE_CELLS) {
         if (unit.state !== "moving") this.setState(unit, "moving");
         this.moveUnitToward(unit, nearestInjured.sprite.x, nearestInjured.sprite.y);
-        // Re-apply tint after state change
-        unit.sprite.setTint(unit.team === "blue" ? 0x66ff99 : 0xff9966);
       } else {
         if (unit.state !== "idle") this.setState(unit, "idle");
-        // Re-apply tint
-        unit.sprite.setTint(unit.team === "blue" ? 0x66ff99 : 0xff9966);
       }
     }
   }
