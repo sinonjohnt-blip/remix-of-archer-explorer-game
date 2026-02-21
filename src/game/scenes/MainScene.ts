@@ -21,10 +21,10 @@ const BLUE_MAX_COL = 4;
 const RED_MIN_COL  = 5;
 
 // ── Sprite scales (reduced for compact grid) ─────────────────────────────────
-const SPRITE_SCALE: Record<UnitType, number> = { archer: 0.6, warrior: 0.65, lancer: 0.45 };
+const SPRITE_SCALE: Record<UnitType, number> = { archer: 0.6, warrior: 0.65, lancer: 0.7 };
 // Lancer idle uses 160px frames; all other lancer anims use 320px frames
-const LANCER_IDLE_SCALE = 0.45;  // 160 * 0.45 ≈ 72px
-const LANCER_ACTION_SCALE = 0.22; // 320 * 0.22 ≈ 70px
+const LANCER_IDLE_SCALE = 0.7;   // 160 * 0.7 ≈ 112px (matches archer/warrior)
+const LANCER_ACTION_SCALE = 0.35; // 320 * 0.35 ≈ 112px
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Modular ability definitions
@@ -62,7 +62,7 @@ function lancerAbilities(): UnitAbilities {
       if (!cell) return [primary];
       const stepCol = attacker.direction; // +1 right, -1 left
       const targets: UnitData[] = [];
-      for (let i = 1; i <= 3; i++) {
+      for (let i = 1; i <= 2; i++) {
         const c = cell.col + stepCol * i;
         const r = cell.row;
         if (c < 0 || c >= GRID_COLS || r < 0 || r >= GRID_ROWS) break;
@@ -316,7 +316,7 @@ export class MainScene extends Phaser.Scene {
         hp = 200; damage = 22; attackRangeCells = 1; speed = 1.2; attackDuration = 500;
         idleAnim = "warrior-idle"; abilities = warriorAbilities(); break;
       case "lancer":
-        hp = 160; damage = 18; attackRangeCells = 2; speed = 1.0; attackDuration = 700;
+        hp = 160; damage = 18; attackRangeCells = 1; speed = 1.0; attackDuration = 700;
         idleAnim = "lancer-idle"; abilities = lancerAbilities(); break;
     }
 
