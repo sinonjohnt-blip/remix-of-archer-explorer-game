@@ -9,9 +9,10 @@ interface UnitSelectorProps {
 }
 
 const units: { type: UnitType; label: string; icon: string; cost: number }[] = [
-  { type: "archer",  label: "Archer",  icon: "/assets/Arrow.png",      cost: 50  },
+  { type: "archer",  label: "Archer",  icon: "/assets/Arrow.png",       cost: 50  },
   { type: "warrior", label: "Warrior", icon: "/assets/Icon_Sword.png",  cost: 80  },
   { type: "lancer",  label: "Lancer",  icon: "/assets/Icon_Shield.png", cost: 100 },
+  { type: "monk",    label: "Monk",    icon: "/assets/Icon_Cross.png",  cost: 60  },
 ];
 
 const UnitSelector: React.FC<UnitSelectorProps> = ({ selected, onSelect }) => {

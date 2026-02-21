@@ -8,7 +8,7 @@ import {
 } from "../types";
 
 // ── Gold costs ────────────────────────────────────────────────────────────────
-const UNIT_COSTS: Record<UnitType, number> = { archer: 50, warrior: 80, lancer: 100 };
+const UNIT_COSTS: Record<UnitType, number> = { archer: 50, warrior: 80, lancer: 100, monk: 60 };
 
 // ── Sprite sheet frame sizes ───────────────────────────────────────────────────
 const ARCHER_FRAME  = 192;
@@ -21,7 +21,7 @@ const BLUE_MAX_COL = 4;
 const RED_MIN_COL  = 5;
 
 // ── Sprite scales (reduced for compact grid) ─────────────────────────────────
-const SPRITE_SCALE: Record<UnitType, number> = { archer: 0.6, warrior: 0.65, lancer: 1.15 };
+const SPRITE_SCALE: Record<UnitType, number> = { archer: 0.6, warrior: 0.65, lancer: 1.15, monk: 0.6 };
 // Lancer idle uses 160px frames; all other lancer anims use 320px frames
 const LANCER_IDLE_SCALE = 1.15;   // character art is drawn smaller within frame
 const LANCER_ACTION_SCALE = 0.55; // 320 * 0.55 ≈ 176px
@@ -75,6 +75,20 @@ function lancerAbilities(): UnitAbilities {
     },
     cooldownAnim: (unit) => lancerDirectionalAnim(unit, "guard"),
     attackAnim:   (unit) => lancerDirectionalAnim(unit, "attack"),
+  };
+}
+
+// ── Monk abilities (healer — no damage) ──────────────────────────────────────
+const MONK_HEAL_RANGE_CELLS = 3;
+const MONK_HEAL_AMOUNT      = 30;
+const MONK_HEAL_COOLDOWN    = 1800; // ms
+const MONK_CAST_DELAY       = 400;  // ms before heal applies
+
+function monkAbilities(): UnitAbilities {
+  return {
+    resolveAttack: () => [],        // monk never deals damage
+    cooldownAnim:  () => "warrior-guard",
+    attackAnim:    () => "warrior-guard", // not used but required by interface
   };
 }
 
@@ -319,14 +333,22 @@ export class MainScene extends Phaser.Scene {
       case "lancer":
         hp = 160; damage = 18; attackRangeCells = 1; speed = 1.0; attackDuration = 700;
         idleAnim = "lancer-idle"; abilities = lancerAbilities(); break;
+      case "monk":
+        hp = 80; damage = 0; attackRangeCells = 0; speed = 0.8; attackDuration = 800;
+        idleAnim = "warrior-idle"; abilities = monkAbilities(); break;
     }
 
-    const texKey = unitType === "archer" ? "idle" : unitType === "warrior" ? "w-idle" : "l-idle";
+    const texKey = unitType === "archer" ? "idle" : unitType === "warrior" ? "w-idle" : unitType === "monk" ? "w-idle" : "l-idle";
     const sprite = this.add.sprite(cell.worldX, cell.worldY, texKey);
     sprite.setScale(scale);
     sprite.setFlipX(flipX);
     sprite.play(idleAnim);
     sprite.setDepth(10 + cell.row);
+
+    // Monk gets a green tint to distinguish from warrior
+    if (unitType === "monk") {
+      sprite.setTint(isBlue ? 0x66ff99 : 0xff9966);
+    }
 
     const meleeRange = attackRangeCells * CELL_W + CELL_W * 0.4;
 
@@ -436,19 +458,31 @@ export class MainScene extends Phaser.Scene {
     switch (next) {
       case "idle":
         setLancerScale(true);
-        unit.sprite.play(
-          unit.unitType === "archer" ? "archer-idle" :
-          unit.unitType === "warrior" ? "warrior-idle" : "lancer-idle", true);
+        if (unit.unitType === "monk") {
+          unit.sprite.play("warrior-idle", true);
+        } else {
+          unit.sprite.play(
+            unit.unitType === "archer" ? "archer-idle" :
+            unit.unitType === "warrior" ? "warrior-idle" : "lancer-idle", true);
+        }
         break;
       case "moving":
         setLancerScale(false);
-        unit.sprite.play(
-          unit.unitType === "archer" ? "archer-run" :
-          unit.unitType === "warrior" ? "warrior-run" : "lancer-run", true);
+        if (unit.unitType === "monk") {
+          unit.sprite.play("warrior-run", true);
+        } else {
+          unit.sprite.play(
+            unit.unitType === "archer" ? "archer-run" :
+            unit.unitType === "warrior" ? "warrior-run" : "lancer-run", true);
+        }
         break;
       case "attacking":
         setLancerScale(false);
         unit.sprite.play(unit.abilities.attackAnim(unit), true);
+        break;
+      case "healing":
+        // Monk heal cast animation — use warrior attack1 anim
+        unit.sprite.play("warrior-attack1", true);
         break;
       case "cooldown":
         setLancerScale(false);
@@ -527,9 +561,21 @@ export class MainScene extends Phaser.Scene {
   private updateUnit(unit: UnitData, delta: number) {
     if (unit.state === "dead") return;
 
+    // Monk has its own update logic
+    if (unit.unitType === "monk") {
+      this.updateMonk(unit, delta);
+      return;
+    }
+
     if (unit.state === "cooldown") {
       unit.cooldownTimer -= delta;
       if (unit.cooldownTimer <= 0) this.setState(unit, "idle");
+      return;
+    }
+
+    if (unit.state === "healing") {
+      // non-monk in healing state (shouldn't happen) — just go idle
+      this.setState(unit, "idle");
       return;
     }
 
@@ -609,23 +655,39 @@ export class MainScene extends Phaser.Scene {
         newCell.occupant = unit;
         unit.gridCell    = newCell;
       } else if (newCell.occupant.team === unit.team) {
-        // Blocked by friendly unit — try sliding perpendicular to get around them
-        const perpX = -dy / len * unit.speed;
-        const perpY =  dx / len * unit.speed * 0.35;
-        // Pick the perpendicular direction that moves toward the target's row
-        const slideDir = (dy !== 0) ? Math.sign(dy) : (Math.random() < 0.5 ? 1 : -1);
-        const slideX = unit.sprite.x + perpX * slideDir * 0.6;
-        const slideY = unit.sprite.y + perpY * slideDir * 0.6;
-        const slideCell = this.worldToCell(slideX, slideY);
-        if (slideCell && (!slideCell.occupant || slideCell.occupant === unit)) {
-          if (unit.gridCell && unit.gridCell.occupant === unit) unit.gridCell.occupant = null;
-          slideCell.occupant = unit;
-          unit.gridCell = slideCell;
-          newX = slideX;
-          newY = slideY;
-        } else {
-          return; // truly stuck — wait
+        // Blocked by friendly — try moving to an adjacent row to go around
+        const curRow = unit.gridCell?.row ?? Math.floor(unit.sprite.y / CELL_H);
+        const curCol = unit.gridCell?.col ?? Math.floor(unit.sprite.x / CELL_W);
+        // Try both vertical directions; prefer direction toward target's Y
+        const offsets = dy > 5 ? [1, -1] : dy < -5 ? [-1, 1] : (Math.random() < 0.5 ? [1, -1] : [-1, 1]);
+        let moved = false;
+        for (const off of offsets) {
+          const tryRow = curRow + off;
+          if (tryRow < 0 || tryRow >= GRID_ROWS) continue;
+          // Try same column, then forward column
+          const colCandidates = [curCol, curCol + unit.direction];
+          for (const tryCol of colCandidates) {
+            if (tryCol < 0 || tryCol >= GRID_COLS) continue;
+            const slideCell = this.grid[tryRow][tryCol];
+            if (!slideCell.occupant || slideCell.occupant === unit) {
+              if (unit.gridCell && unit.gridCell.occupant === unit) unit.gridCell.occupant = null;
+              slideCell.occupant = unit;
+              unit.gridCell = slideCell;
+              // Smoothly move toward the target cell center
+              const sdx = slideCell.worldX - unit.sprite.x;
+              const sdy = slideCell.worldY - unit.sprite.y;
+              const slen = Math.sqrt(sdx * sdx + sdy * sdy);
+              if (slen > 1) {
+                newX = unit.sprite.x + (sdx / slen) * unit.speed;
+                newY = unit.sprite.y + (sdy / slen) * unit.speed * 0.6;
+              }
+              moved = true;
+              break;
+            }
+          }
+          if (moved) break;
         }
+        if (!moved) return; // truly stuck — wait
       } else {
         return; // blocked by enemy — stop (will attack)
       }
@@ -634,6 +696,106 @@ export class MainScene extends Phaser.Scene {
     unit.sprite.x = newX;
     unit.sprite.y = newY;
     unit.sprite.setDepth(10 + Math.floor(unit.sprite.y / CELL_H));
+  }
+
+  // ── Monk AI (healer) ──────────────────────────────────────────────────────
+  private updateMonk(unit: UnitData, delta: number) {
+    if (unit.state === "dead") return;
+
+    if (unit.state === "cooldown") {
+      unit.cooldownTimer -= delta;
+      if (unit.cooldownTimer <= 0) this.setState(unit, "idle");
+      return;
+    }
+
+    // If in healing state, wait for cast to finish (handled by timer)
+    if (unit.state === "healing") return;
+
+    // Find injured ally within heal range
+    const allies = unit.team === "blue" ? this.teamBlue : this.teamRed;
+    const healRange = MONK_HEAL_RANGE_CELLS * CELL_W;
+
+    let bestTarget: UnitData | null = null;
+    let lowestPct = 1.0;
+
+    for (const ally of allies) {
+      if (ally === unit || ally.state === "dead") continue;
+      if (ally.hp >= ally.maxHp) continue;
+      const pct = ally.hp / ally.maxHp;
+      const dist = this.gridDistance(unit, ally);
+      if (dist <= MONK_HEAL_RANGE_CELLS && pct < lowestPct) {
+        lowestPct = pct;
+        bestTarget = ally;
+      }
+    }
+
+    if (bestTarget) {
+      // Face the target
+      if (bestTarget.sprite.x > unit.sprite.x) { unit.direction = 1; unit.sprite.setFlipX(false); }
+      else { unit.direction = -1; unit.sprite.setFlipX(true); }
+
+      // Begin healing cast
+      this.setState(unit, "healing");
+
+      // After cast delay, apply heal
+      this.time.delayedCall(MONK_CAST_DELAY, () => {
+        if (unit.state === "dead" || !bestTarget || bestTarget.state === "dead") {
+          if (unit.state !== "dead") this.setState(unit, "idle");
+          return;
+        }
+        // Apply heal
+        bestTarget.hp = Math.min(bestTarget.maxHp, bestTarget.hp + MONK_HEAL_AMOUNT);
+        // Green flash on healed unit
+        bestTarget.sprite.setTint(0x44ff44);
+        this.time.delayedCall(200, () => {
+          if (bestTarget!.state !== "dead") {
+            // Restore monk tint or clear
+            if (bestTarget!.unitType === "monk") {
+              bestTarget!.sprite.setTint(bestTarget!.team === "blue" ? 0x66ff99 : 0xff9966);
+            } else {
+              bestTarget!.sprite.clearTint();
+            }
+          }
+        });
+
+        // Enter cooldown
+        this.setState(unit, "cooldown");
+        unit.cooldownTimer = MONK_HEAL_COOLDOWN;
+        // Re-apply monk tint after healing anim
+        unit.sprite.setTint(unit.team === "blue" ? 0x66ff99 : 0xff9966);
+      });
+    } else {
+      // No injured ally in range — check if any injured ally exists to move toward
+      let nearestInjured: UnitData | null = null;
+      let minDist = Infinity;
+      for (const ally of allies) {
+        if (ally === unit || ally.state === "dead" || ally.hp >= ally.maxHp) continue;
+        const d = this.gridDistance(unit, ally);
+        if (d < minDist) { minDist = d; nearestInjured = ally; }
+      }
+
+      if (nearestInjured && minDist > MONK_HEAL_RANGE_CELLS) {
+        if (unit.state !== "moving") this.setState(unit, "moving");
+        this.moveUnitToward(unit, nearestInjured.sprite.x, nearestInjured.sprite.y);
+        // Re-apply tint after state change
+        unit.sprite.setTint(unit.team === "blue" ? 0x66ff99 : 0xff9966);
+      } else {
+        if (unit.state !== "idle") this.setState(unit, "idle");
+        // Re-apply tint
+        unit.sprite.setTint(unit.team === "blue" ? 0x66ff99 : 0xff9966);
+      }
+    }
+  }
+
+  // ── Grid distance helper (cell-based) ─────────────────────────────────────
+  private gridDistance(a: UnitData, b: UnitData): number {
+    if (!a.gridCell || !b.gridCell) {
+      // Fallback to world distance converted to cells
+      return Phaser.Math.Distance.Between(a.sprite.x, a.sprite.y, b.sprite.x, b.sprite.y) / CELL_W;
+    }
+    const dc = Math.abs(a.gridCell.col - b.gridCell.col);
+    const dr = Math.abs(a.gridCell.row - b.gridCell.row);
+    return Math.max(dc, dr); // Chebyshev distance
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────

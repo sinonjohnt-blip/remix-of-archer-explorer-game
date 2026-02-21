@@ -1,8 +1,8 @@
 import Phaser from "phaser";
 
-export type UnitType  = "archer" | "warrior" | "lancer";
+export type UnitType  = "archer" | "warrior" | "lancer" | "monk";
 export type Team      = "blue" | "red";
-export type UnitState = "idle" | "moving" | "attacking" | "cooldown" | "dead";
+export type UnitState = "idle" | "moving" | "attacking" | "cooldown" | "dead" | "healing";
 
 // ── Grid ──────────────────────────────────────────────────────────────────────
 export interface GridCell {
