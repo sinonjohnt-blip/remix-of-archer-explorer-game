@@ -13,14 +13,18 @@ const UNIT_COSTS: Record<UnitType, number> = { archer: 50, warrior: 80, lancer: 
 // ── Sprite sheet frame sizes ───────────────────────────────────────────────────
 const ARCHER_FRAME  = 192;
 const WARRIOR_FRAME = 192;
-const LANCER_FRAME  = 192;
+const LANCER_IDLE_FRAME = 160;
+const LANCER_FRAME = 320;
 
 // ── Blue team occupies cols 0-4; Red team cols 5-9 ────────────────────────────
 const BLUE_MAX_COL = 4;
 const RED_MIN_COL  = 5;
 
 // ── Sprite scales (reduced for compact grid) ─────────────────────────────────
-const SPRITE_SCALE: Record<UnitType, number> = { archer: 0.6, warrior: 0.65, lancer: 0.65 };
+const SPRITE_SCALE: Record<UnitType, number> = { archer: 0.6, warrior: 0.65, lancer: 0.45 };
+// Lancer idle uses 160px frames; all other lancer anims use 320px frames
+const LANCER_IDLE_SCALE = 0.45;  // 160 * 0.45 ≈ 72px
+const LANCER_ACTION_SCALE = 0.22; // 320 * 0.22 ≈ 70px
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Modular ability definitions
@@ -107,7 +111,7 @@ export class MainScene extends Phaser.Scene {
     this.load.spritesheet("w-guard",   "/assets/Warrior_Guard.png",   { frameWidth: WARRIOR_FRAME, frameHeight: WARRIOR_FRAME });
 
     // Lancer — all directions
-    this.load.spritesheet("l-idle",             "/assets/Lancer_Idle.png",             { frameWidth: LANCER_FRAME, frameHeight: LANCER_FRAME });
+    this.load.spritesheet("l-idle",             "/assets/Lancer_Idle.png",             { frameWidth: LANCER_IDLE_FRAME, frameHeight: LANCER_IDLE_FRAME });
     this.load.spritesheet("l-run",              "/assets/Lancer_Run.png",              { frameWidth: LANCER_FRAME, frameHeight: LANCER_FRAME });
     this.load.spritesheet("l-right-attack",     "/assets/Lancer_Right_Attack.png",     { frameWidth: LANCER_FRAME, frameHeight: LANCER_FRAME });
     this.load.spritesheet("l-right-guard",      "/assets/Lancer_Right_Defence.png",    { frameWidth: LANCER_FRAME, frameHeight: LANCER_FRAME });
@@ -421,21 +425,32 @@ export class MainScene extends Phaser.Scene {
     if (unit.state === "dead") return;
     unit.state = next;
 
+    // Lancer uses different frame sizes: idle=160px, everything else=320px
+    const setLancerScale = (isIdle: boolean) => {
+      if (unit.unitType === "lancer") {
+        unit.sprite.setScale(isIdle ? LANCER_IDLE_SCALE : LANCER_ACTION_SCALE);
+      }
+    };
+
     switch (next) {
       case "idle":
+        setLancerScale(true);
         unit.sprite.play(
           unit.unitType === "archer" ? "archer-idle" :
           unit.unitType === "warrior" ? "warrior-idle" : "lancer-idle", true);
         break;
       case "moving":
+        setLancerScale(false);
         unit.sprite.play(
           unit.unitType === "archer" ? "archer-run" :
           unit.unitType === "warrior" ? "warrior-run" : "lancer-run", true);
         break;
       case "attacking":
+        setLancerScale(false);
         unit.sprite.play(unit.abilities.attackAnim(unit), true);
         break;
       case "cooldown":
+        setLancerScale(false);
         unit.sprite.play(unit.abilities.cooldownAnim(unit), true);
         break;
       case "dead":
