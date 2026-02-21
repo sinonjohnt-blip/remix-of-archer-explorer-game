@@ -598,16 +598,37 @@ export class MainScene extends Phaser.Scene {
     const nx = (dx / len) * unit.speed;
     const ny = (dy / len) * unit.speed * 0.35;
 
-    const newX = unit.sprite.x + nx;
-    const newY = unit.sprite.y + ny;
+    let newX = unit.sprite.x + nx;
+    let newY = unit.sprite.y + ny;
 
     const newCell = this.worldToCell(newX, newY);
     if (newCell && newCell !== unit.gridCell) {
       if (!newCell.occupant || newCell.occupant === unit) {
+        // Cell is free — move in
         if (unit.gridCell && unit.gridCell.occupant === unit) unit.gridCell.occupant = null;
         newCell.occupant = unit;
         unit.gridCell    = newCell;
-      } else return;
+      } else if (newCell.occupant.team === unit.team) {
+        // Blocked by friendly unit — try sliding perpendicular to get around them
+        const perpX = -dy / len * unit.speed;
+        const perpY =  dx / len * unit.speed * 0.35;
+        // Pick the perpendicular direction that moves toward the target's row
+        const slideDir = (dy !== 0) ? Math.sign(dy) : (Math.random() < 0.5 ? 1 : -1);
+        const slideX = unit.sprite.x + perpX * slideDir * 0.6;
+        const slideY = unit.sprite.y + perpY * slideDir * 0.6;
+        const slideCell = this.worldToCell(slideX, slideY);
+        if (slideCell && (!slideCell.occupant || slideCell.occupant === unit)) {
+          if (unit.gridCell && unit.gridCell.occupant === unit) unit.gridCell.occupant = null;
+          slideCell.occupant = unit;
+          unit.gridCell = slideCell;
+          newX = slideX;
+          newY = slideY;
+        } else {
+          return; // truly stuck — wait
+        }
+      } else {
+        return; // blocked by enemy — stop (will attack)
+      }
     }
 
     unit.sprite.x = newX;
