@@ -21,10 +21,10 @@ const BLUE_MAX_COL = 4;
 const RED_MIN_COL  = 5;
 
 // ── Sprite scales (reduced for compact grid) ─────────────────────────────────
-const SPRITE_SCALE: Record<UnitType, number> = { archer: 0.6, warrior: 0.65, lancer: 0.7 };
+const SPRITE_SCALE: Record<UnitType, number> = { archer: 0.6, warrior: 0.65, lancer: 1.15 };
 // Lancer idle uses 160px frames; all other lancer anims use 320px frames
-const LANCER_IDLE_SCALE = 0.7;   // 160 * 0.7 ≈ 112px (matches archer/warrior)
-const LANCER_ACTION_SCALE = 0.35; // 320 * 0.35 ≈ 112px
+const LANCER_IDLE_SCALE = 1.15;   // character art is drawn smaller within frame
+const LANCER_ACTION_SCALE = 0.55; // 320 * 0.55 ≈ 176px
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Modular ability definitions
@@ -155,6 +155,7 @@ export class MainScene extends Phaser.Scene {
     this.input.on("pointerdown", (p: Phaser.Input.Pointer) => {
       this.tryPlaceUnit(p.x, p.y);
     });
+
   }
 
   // ── Build grid ────────────────────────────────────────────────────────────
