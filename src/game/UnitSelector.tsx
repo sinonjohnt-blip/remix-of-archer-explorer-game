@@ -8,11 +8,13 @@ interface UnitSelectorProps {
   onSelect: (type: UnitType) => void;
 }
 
-const units: { type: UnitType; label: string; icon: string; cost: number }[] = [
-  { type: "archer",  label: "Archer",  icon: "/assets/Arrow.png",       cost: 50  },
-  { type: "warrior", label: "Warrior", icon: "/assets/Icon_Sword.png",  cost: 80  },
-  { type: "lancer",  label: "Lancer",  icon: "/assets/Icon_Shield.png", cost: 100 },
-  { type: "monk",    label: "Monk",    icon: "/assets/Icon_Cross.png",  cost: 60  },
+const DISPLAY_SIZE = 36;
+
+const units: { type: UnitType; label: string; sprite: string; cost: number; frames: number; frameSize: number }[] = [
+  { type: "archer",  label: "Archer",  sprite: "/assets/Archer_Idle.png",  cost: 50,  frames: 6,  frameSize: 192 },
+  { type: "warrior", label: "Warrior", sprite: "/assets/Warrior_Idle.png", cost: 80,  frames: 8,  frameSize: 192 },
+  { type: "lancer",  label: "Lancer",  sprite: "/assets/Lancer_Idle.png",  cost: 100, frames: 12, frameSize: 160 },
+  { type: "monk",    label: "Monk",    sprite: "/assets/Monk_Idle.png",    cost: 60,  frames: 6,  frameSize: 192 },
 ];
 
 const UnitSelector: React.FC<UnitSelectorProps> = ({ selected, onSelect }) => {
@@ -26,6 +28,11 @@ const UnitSelector: React.FC<UnitSelectorProps> = ({ selected, onSelect }) => {
       </span>
       {units.map((u) => {
         const isActive = selected === u.type;
+        // Scale: we want one frame to be DISPLAY_SIZE px wide
+        // Total spritesheet width = frames * frameSize
+        // Scaled total width = frames * DISPLAY_SIZE
+        const scaledTotalW = u.frames * DISPLAY_SIZE;
+        const scaledTotalH = DISPLAY_SIZE;
         return (
           <button
             key={u.type}
@@ -34,7 +41,7 @@ const UnitSelector: React.FC<UnitSelectorProps> = ({ selected, onSelect }) => {
             style={{ border: "none", background: "none", padding: 0, cursor: "pointer" }}
           >
             <div
-              className="flex flex-col items-center justify-center px-3 py-1.5 rounded"
+              className="flex flex-col items-center justify-center px-2 py-1.5 rounded"
               style={{
                 background: isActive
                   ? "linear-gradient(180deg, hsl(40 50% 35%) 0%, hsl(35 40% 22%) 100%)"
@@ -49,12 +56,17 @@ const UnitSelector: React.FC<UnitSelectorProps> = ({ selected, onSelect }) => {
                 transition: "all 0.1s",
               }}
             >
-              <img
-                src={u.icon}
-                alt={u.label}
-                className="w-6 h-6"
-                style={{ imageRendering: "pixelated" }}
-                draggable={false}
+              {/* Miniature unit sprite — first frame via background-image */}
+              <div
+                style={{
+                  width: DISPLAY_SIZE,
+                  height: DISPLAY_SIZE,
+                  backgroundImage: `url(${u.sprite})`,
+                  backgroundSize: `${scaledTotalW}px ${scaledTotalH}px`,
+                  backgroundPosition: "0 0",
+                  backgroundRepeat: "no-repeat",
+                  imageRendering: "pixelated",
+                }}
               />
               <span
                 className="text-[10px] font-bold mt-0.5"
