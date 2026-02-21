@@ -21,8 +21,8 @@ const PhaserGame = () => {
 
     const game = new Phaser.Game({
       type: Phaser.AUTO,
-      width: 800,
-      height: 600,
+      width: 720,
+      height: 480,
       parent: containerRef.current,
       backgroundColor: "#4a6741",
       scene: MainScene,
@@ -85,7 +85,7 @@ const PhaserGame = () => {
       <div
         className="flex items-center justify-between w-full px-4 py-2 rounded-t-lg border-x-4 border-t-4"
         style={{
-          maxWidth: 800,
+          maxWidth: 720,
           background: "linear-gradient(180deg, hsl(30 18% 16%) 0%, hsl(25 15% 12%) 100%)",
           borderColor: "hsl(30 30% 22%)",
         }}

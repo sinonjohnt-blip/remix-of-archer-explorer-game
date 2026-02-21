@@ -19,13 +19,16 @@ const LANCER_FRAME  = 192;
 const BLUE_MAX_COL = 4;
 const RED_MIN_COL  = 5;
 
+// ── Sprite scales (reduced for compact grid) ─────────────────────────────────
+const SPRITE_SCALE: Record<UnitType, number> = { archer: 0.6, warrior: 0.65, lancer: 0.65 };
+
 // ─────────────────────────────────────────────────────────────────────────────
-//  Modular ability definitions — add new units here without touching AI logic
+//  Modular ability definitions
 // ─────────────────────────────────────────────────────────────────────────────
 
 function archerAbilities(): UnitAbilities {
   return {
-    resolveAttack: () => [],   // archer uses projectiles, not direct resolve
+    resolveAttack: () => [],
     cooldownAnim: () => "archer-idle",
     attackAnim:   () => "archer-shoot",
   };
@@ -39,9 +42,17 @@ function warriorAbilities(): UnitAbilities {
   };
 }
 
+/** Pick directional lancer anim based on facing toward target */
+function lancerDirectionalAnim(unit: UnitData, prefix: "attack" | "guard"): string {
+  // Use stored attack direction or default to right
+  const dir = (unit as any)._atkDir as string | undefined;
+  if (dir && prefix === "attack") return `lancer-${dir}-attack`;
+  if (dir && prefix === "guard")  return `lancer-${dir}-guard`;
+  return unit.direction === 1 ? `lancer-right-${prefix}` : `lancer-right-${prefix}`;
+}
+
 function lancerAbilities(): UnitAbilities {
   return {
-    /** Pierce up to 3 enemies in a straight horizontal line ahead of the lancer */
     resolveAttack: (attacker, primary, grid) => {
       const cell = attacker.gridCell;
       if (!cell) return [primary];
@@ -58,55 +69,63 @@ function lancerAbilities(): UnitAbilities {
       }
       return targets.length ? targets : (primary.state !== "dead" ? [primary] : []);
     },
-    cooldownAnim: (unit) => unit.direction === 1 ? "lancer-right-guard" : "lancer-right-guard",
-    attackAnim:   (unit) => unit.direction === 1 ? "lancer-right-attack" : "lancer-right-attack",
+    cooldownAnim: (unit) => lancerDirectionalAnim(unit, "guard"),
+    attackAnim:   (unit) => lancerDirectionalAnim(unit, "attack"),
   };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 export class MainScene extends Phaser.Scene {
-  teamBlue: UnitData[]       = [];
-  teamRed:  UnitData[]       = [];
+  teamBlue: UnitData[]        = [];
+  teamRed:  UnitData[]        = [];
   arrows:   ArrowProjectile[] = [];
   battleStarted = false;
   selectedUnitType: UnitType = "archer";
   goldRef: { blue: number; red: number } = { blue: 500, red: 500 };
 
   // Grid
-  private grid: GridCell[][] = [];           // grid[row][col]
+  private grid: GridCell[][] = [];
   private gridGraphics!: Phaser.GameObjects.Graphics;
   private hoverGraphics!: Phaser.GameObjects.Graphics;
-
   private placementText!: Phaser.GameObjects.Text;
 
   constructor() { super("MainScene"); }
 
   // ── Preload ────────────────────────────────────────────────────────────────
   preload() {
-    this.load.spritesheet("idle",  "/assets/Archer_Idle.png",  { frameWidth: ARCHER_FRAME,  frameHeight: ARCHER_FRAME });
-    this.load.spritesheet("run",   "/assets/Archer_Run.png",   { frameWidth: ARCHER_FRAME,  frameHeight: ARCHER_FRAME });
-    this.load.spritesheet("shoot", "/assets/Archer_Shoot.png", { frameWidth: ARCHER_FRAME,  frameHeight: ARCHER_FRAME });
+    // Archer
+    this.load.spritesheet("idle",  "/assets/Archer_Idle.png",  { frameWidth: ARCHER_FRAME, frameHeight: ARCHER_FRAME });
+    this.load.spritesheet("run",   "/assets/Archer_Run.png",   { frameWidth: ARCHER_FRAME, frameHeight: ARCHER_FRAME });
+    this.load.spritesheet("shoot", "/assets/Archer_Shoot.png", { frameWidth: ARCHER_FRAME, frameHeight: ARCHER_FRAME });
     this.load.image("arrow", "/assets/Arrow.png");
 
+    // Warrior
     this.load.spritesheet("w-idle",    "/assets/Warrior_Idle.png",    { frameWidth: WARRIOR_FRAME, frameHeight: WARRIOR_FRAME });
     this.load.spritesheet("w-run",     "/assets/Warrior_Run.png",     { frameWidth: WARRIOR_FRAME, frameHeight: WARRIOR_FRAME });
     this.load.spritesheet("w-attack1", "/assets/Warrior_Attack1.png", { frameWidth: WARRIOR_FRAME, frameHeight: WARRIOR_FRAME });
     this.load.spritesheet("w-attack2", "/assets/Warrior_Attack2.png", { frameWidth: WARRIOR_FRAME, frameHeight: WARRIOR_FRAME });
     this.load.spritesheet("w-guard",   "/assets/Warrior_Guard.png",   { frameWidth: WARRIOR_FRAME, frameHeight: WARRIOR_FRAME });
 
-    this.load.spritesheet("l-idle",         "/assets/Lancer_Idle.png",          { frameWidth: LANCER_FRAME, frameHeight: LANCER_FRAME });
-    this.load.spritesheet("l-run",          "/assets/Lancer_Run.png",           { frameWidth: LANCER_FRAME, frameHeight: LANCER_FRAME });
-    this.load.spritesheet("l-right-attack", "/assets/Lancer_Right_Attack.png",  { frameWidth: LANCER_FRAME, frameHeight: LANCER_FRAME });
-    this.load.spritesheet("l-right-guard",  "/assets/Lancer_Right_Defence.png", { frameWidth: LANCER_FRAME, frameHeight: LANCER_FRAME });
-    this.load.spritesheet("l-up-attack",    "/assets/Lancer_Up_Attack.png",     { frameWidth: LANCER_FRAME, frameHeight: LANCER_FRAME });
-    this.load.spritesheet("l-up-guard",     "/assets/Lancer_Up_Defence.png",    { frameWidth: LANCER_FRAME, frameHeight: LANCER_FRAME });
+    // Lancer — all directions
+    this.load.spritesheet("l-idle",             "/assets/Lancer_Idle.png",             { frameWidth: LANCER_FRAME, frameHeight: LANCER_FRAME });
+    this.load.spritesheet("l-run",              "/assets/Lancer_Run.png",              { frameWidth: LANCER_FRAME, frameHeight: LANCER_FRAME });
+    this.load.spritesheet("l-right-attack",     "/assets/Lancer_Right_Attack.png",     { frameWidth: LANCER_FRAME, frameHeight: LANCER_FRAME });
+    this.load.spritesheet("l-right-guard",      "/assets/Lancer_Right_Defence.png",    { frameWidth: LANCER_FRAME, frameHeight: LANCER_FRAME });
+    this.load.spritesheet("l-up-attack",        "/assets/Lancer_Up_Attack.png",        { frameWidth: LANCER_FRAME, frameHeight: LANCER_FRAME });
+    this.load.spritesheet("l-up-guard",         "/assets/Lancer_Up_Defence.png",       { frameWidth: LANCER_FRAME, frameHeight: LANCER_FRAME });
+    this.load.spritesheet("l-down-attack",      "/assets/Lancer_Down_Attack.png",      { frameWidth: LANCER_FRAME, frameHeight: LANCER_FRAME });
+    this.load.spritesheet("l-down-guard",       "/assets/Lancer_Down_Defence.png",     { frameWidth: LANCER_FRAME, frameHeight: LANCER_FRAME });
+    this.load.spritesheet("l-upright-attack",   "/assets/Lancer_UpRight_Attack.png",   { frameWidth: LANCER_FRAME, frameHeight: LANCER_FRAME });
+    this.load.spritesheet("l-upright-guard",    "/assets/Lancer_UpRight_Defence.png",  { frameWidth: LANCER_FRAME, frameHeight: LANCER_FRAME });
+    this.load.spritesheet("l-downright-attack", "/assets/Lancer_DownRight_Attack.png", { frameWidth: LANCER_FRAME, frameHeight: LANCER_FRAME });
+    this.load.spritesheet("l-downright-guard",  "/assets/Lancer_DownRight_Defence.png",{ frameWidth: LANCER_FRAME, frameHeight: LANCER_FRAME });
   }
 
   // ── Create ─────────────────────────────────────────────────────────────────
   create() {
-    this.arrows       = [];
-    this.teamBlue     = [];
-    this.teamRed      = [];
+    this.arrows        = [];
+    this.teamBlue      = [];
+    this.teamRed       = [];
     this.battleStarted = false;
 
     this.buildGrid();
@@ -116,38 +135,34 @@ export class MainScene extends Phaser.Scene {
     this.hoverGraphics = this.add.graphics();
     this.drawGrid();
 
-    this.placementText = this.add.text(GAME_W / 2, 18,
+    this.placementText = this.add.text(GAME_W / 2, 14,
       "Click a cell to place a unit  ·  Left = Blue  |  Right = Red", {
-        fontSize: "11px",
+        fontSize: "10px",
         color: "#e8d5a3",
         backgroundColor: "#1a150eaa",
-        padding: { x: 8, y: 4 },
+        padding: { x: 8, y: 3 },
       }).setOrigin(0.5).setDepth(20);
 
-    // Hover highlight
     this.input.on("pointermove", (p: Phaser.Input.Pointer) => {
       if (this.battleStarted) { this.hoverGraphics.clear(); return; }
       this.drawHoverCell(p.x, p.y);
     });
 
-    // Click → place
     this.input.on("pointerdown", (p: Phaser.Input.Pointer) => {
-      if (this.battleStarted) return;
       this.tryPlaceUnit(p.x, p.y);
     });
   }
 
-  // ── Build the 2-D cell array ───────────────────────────────────────────────
+  // ── Build grid ────────────────────────────────────────────────────────────
   private buildGrid() {
     this.grid = [];
     for (let r = 0; r < GRID_ROWS; r++) {
       const row: GridCell[] = [];
       for (let c = 0; c < GRID_COLS; c++) {
         row.push({
-          col:      c,
-          row:      r,
-          worldX:   c * CELL_W + CELL_W / 2,
-          worldY:   r * CELL_H + CELL_H / 2,
+          col: c, row: r,
+          worldX: c * CELL_W + CELL_W / 2,
+          worldY: r * CELL_H + CELL_H / 2,
           occupant: null,
         });
       }
@@ -155,45 +170,40 @@ export class MainScene extends Phaser.Scene {
     }
   }
 
-  // ── Draw the grid overlay ─────────────────────────────────────────────────
+  // ── Draw grid ─────────────────────────────────────────────────────────────
   private drawGrid() {
     const g = this.gridGraphics;
     g.clear();
-
-    // Divider between blue/red halves (between col 4 and 5)
-    g.lineStyle(2, 0xffffff, 0.25);
     const divX = RED_MIN_COL * CELL_W;
+    g.lineStyle(2, 0xffffff, 0.25);
     g.lineBetween(divX, 0, divX, GAME_H);
-
-    // Blue half tint
     g.fillStyle(0x3399ff, 0.04);
     g.fillRect(0, 0, divX, GAME_H);
-    // Red half tint
     g.fillStyle(0xff4455, 0.04);
     g.fillRect(divX, 0, GAME_W - divX, GAME_H);
-
-    // Cell lines
     g.lineStyle(1, 0xffffff, 0.08);
-    for (let c = 0; c <= GRID_COLS; c++) {
-      g.lineBetween(c * CELL_W, 0, c * CELL_W, GAME_H);
-    }
-    for (let r = 0; r <= GRID_ROWS; r++) {
-      g.lineBetween(0, r * CELL_H, GAME_W, r * CELL_H);
-    }
+    for (let c = 0; c <= GRID_COLS; c++) g.lineBetween(c * CELL_W, 0, c * CELL_W, GAME_H);
+    for (let r = 0; r <= GRID_ROWS; r++) g.lineBetween(0, r * CELL_H, GAME_W, r * CELL_H);
   }
 
-  // ── Hover highlight ───────────────────────────────────────────────────────
+  // ── Hover ─────────────────────────────────────────────────────────────────
   private drawHoverCell(px: number, py: number) {
     const cell = this.worldToCell(px, py);
     const h    = this.hoverGraphics;
     h.clear();
     if (!cell) return;
 
-    const team: Team = cell.col < RED_MIN_COL ? "blue" : "red";
-    const cost       = UNIT_COSTS[this.selectedUnitType];
-    const hasGold    = (team === "blue" ? this.goldRef.blue : this.goldRef.red) >= cost;
-    const occupied   = !!cell.occupant;
-    const canPlace   = hasGold && !occupied;
+    const occupied = !!cell.occupant;
+    // During pre-battle: always green if empty; during battle: check gold too
+    let canPlace: boolean;
+    if (!this.battleStarted) {
+      canPlace = !occupied;
+    } else {
+      const team: Team = cell.col < RED_MIN_COL ? "blue" : "red";
+      const cost = UNIT_COSTS[this.selectedUnitType];
+      const hasGold = (team === "blue" ? this.goldRef.blue : this.goldRef.red) >= cost;
+      canPlace = hasGold && !occupied;
+    }
 
     const color = canPlace ? 0x88ffaa : 0xff4444;
     const alpha = canPlace ? 0.18 : 0.25;
@@ -203,34 +213,36 @@ export class MainScene extends Phaser.Scene {
     h.strokeRect(cell.col * CELL_W + 1, cell.row * CELL_H + 1, CELL_W - 2, CELL_H - 2);
   }
 
-  // ── Try to place a unit ───────────────────────────────────────────────────
+  // ── Place unit ────────────────────────────────────────────────────────────
   private tryPlaceUnit(px: number, py: number) {
     const cell = this.worldToCell(px, py);
     if (!cell) return;
 
     const team: Team = cell.col < RED_MIN_COL ? "blue" : "red";
     const cost       = UNIT_COSTS[this.selectedUnitType];
-    const currentGold = team === "blue" ? this.goldRef.blue : this.goldRef.red;
-    if (currentGold < cost) {
-      this.flashCell(cell, 0xff4444);
-      return;
-    }
-    if (cell.occupant) {
-      this.flashCell(cell, 0xff4444);
-      return;
+
+    // Gold check ONLY during battle (reinforcements)
+    if (this.battleStarted) {
+      const currentGold = team === "blue" ? this.goldRef.blue : this.goldRef.red;
+      if (currentGold < cost) { this.flashCell(cell, 0xff4444); return; }
     }
 
-    const unit = this.spawnUnit(cell, team, this.selectedUnitType);
+    if (cell.occupant) { this.flashCell(cell, 0xff4444); return; }
+
+    const unit    = this.spawnUnit(cell, team, this.selectedUnitType);
     cell.occupant = unit;
     unit.gridCell = cell;
 
     if (team === "blue") this.teamBlue.push(unit);
     else                  this.teamRed.push(unit);
 
-    this.events.emit("unit-placed", { team, cost });
+    // Emit cost only during battle
+    if (this.battleStarted) {
+      this.events.emit("unit-placed", { team, cost });
+    }
   }
 
-  // ── Flash a cell red/green briefly ───────────────────────────────────────
+  // ── Flash cell ────────────────────────────────────────────────────────────
   private flashCell(cell: GridCell, color: number) {
     const g = this.add.graphics().setDepth(30);
     g.fillStyle(color, 0.45);
@@ -238,7 +250,7 @@ export class MainScene extends Phaser.Scene {
     this.time.delayedCall(300, () => g.destroy());
   }
 
-  // ── World → grid cell ──────────────────────────────────────────────────────
+  // ── World → Cell ──────────────────────────────────────────────────────────
   worldToCell(px: number, py: number): GridCell | null {
     const col = Math.floor(px / CELL_W);
     const row = Math.floor(py / CELL_H);
@@ -246,7 +258,7 @@ export class MainScene extends Phaser.Scene {
     return this.grid[row][col];
   }
 
-  // ── Animations ─────────────────────────────────────────────────────────────
+  // ── Animations ────────────────────────────────────────────────────────────
   private createAnims() {
     const def = (key: string, tex: string, start: number, end: number, rate = 8, repeat = -1) => {
       if (!this.anims.exists(key))
@@ -265,66 +277,61 @@ export class MainScene extends Phaser.Scene {
     def("warrior-attack2", "w-attack2", 0, 3, 10, 0);
     def("warrior-guard",   "w-guard",   0, 5);
 
-    // Lancer
-    def("lancer-idle",         "l-idle",         0, 11, 8);
-    def("lancer-run",          "l-run",          0, 5,  8);
-    def("lancer-right-attack", "l-right-attack", 0, 2,  10, 0);
-    def("lancer-right-guard",  "l-right-guard",  0, 5,  8);
-    def("lancer-up-attack",    "l-up-attack",    0, 2,  10, 0);
-    def("lancer-up-guard",     "l-up-guard",     0, 5,  8);
+    // Lancer — all directions
+    def("lancer-idle",             "l-idle",             0, 11, 8);
+    def("lancer-run",              "l-run",              0, 5,  8);
+    def("lancer-right-attack",     "l-right-attack",     0, 2,  10, 0);
+    def("lancer-right-guard",      "l-right-guard",      0, 5,  8);
+    def("lancer-up-attack",        "l-up-attack",        0, 2,  10, 0);
+    def("lancer-up-guard",         "l-up-guard",         0, 5,  8);
+    def("lancer-down-attack",      "l-down-attack",      0, 2,  10, 0);
+    def("lancer-down-guard",       "l-down-guard",       0, 5,  8);
+    def("lancer-upright-attack",   "l-upright-attack",   0, 2,  10, 0);
+    def("lancer-upright-guard",    "l-upright-guard",    0, 5,  8);
+    def("lancer-downright-attack", "l-downright-attack", 0, 2,  10, 0);
+    def("lancer-downright-guard",  "l-downright-guard",  0, 5,  8);
   }
 
-  // ── Spawn unit onto a grid cell ────────────────────────────────────────────
+  // ── Spawn unit ────────────────────────────────────────────────────────────
   private spawnUnit(cell: GridCell, team: Team, unitType: UnitType): UnitData {
-    const isBlue     = team === "blue";
-    const teamColor  = isBlue ? 0x3399ff : 0xff4455;
-    const direction  = isBlue ? 1 : -1;
-    const flipX      = !isBlue;
+    const isBlue    = team === "blue";
+    const teamColor = isBlue ? 0x3399ff : 0xff4455;
+    const direction = isBlue ? 1 : -1;
+    const flipX     = !isBlue;
 
-    let hp: number, damage: number, attackRangeCells: number, speed: number, scale: number, attackDuration: number;
+    let hp: number, damage: number, attackRangeCells: number, speed: number, attackDuration: number;
     let idleAnim: string;
     let abilities: UnitAbilities;
+    const scale = SPRITE_SCALE[unitType];
 
     switch (unitType) {
       case "archer":
-        hp = 100; damage = 15; attackRangeCells = 5; speed = 0.8; scale = 0.85; attackDuration = 700;
+        hp = 100; damage = 15; attackRangeCells = 5; speed = 0.8; attackDuration = 700;
         idleAnim = "archer-idle"; abilities = archerAbilities(); break;
       case "warrior":
-        hp = 200; damage = 22; attackRangeCells = 1; speed = 1.2; scale = 0.9; attackDuration = 500;
+        hp = 200; damage = 22; attackRangeCells = 1; speed = 1.2; attackDuration = 500;
         idleAnim = "warrior-idle"; abilities = warriorAbilities(); break;
       case "lancer":
-        hp = 160; damage = 18; attackRangeCells = 2; speed = 1.0; scale = 0.9; attackDuration = 700;
+        hp = 160; damage = 18; attackRangeCells = 2; speed = 1.0; attackDuration = 700;
         idleAnim = "lancer-idle"; abilities = lancerAbilities(); break;
     }
 
-    const worldX = cell.worldX;
-    const worldY = cell.worldY;
-
-    const sprite = this.add.sprite(worldX, worldY, unitType === "archer" ? "idle" : unitType === "warrior" ? "w-idle" : "l-idle");
+    const texKey = unitType === "archer" ? "idle" : unitType === "warrior" ? "w-idle" : "l-idle";
+    const sprite = this.add.sprite(cell.worldX, cell.worldY, texKey);
     sprite.setScale(scale);
     sprite.setFlipX(flipX);
     sprite.play(idleAnim);
     sprite.setDepth(10 + cell.row);
 
-    const meleeRange = attackRangeCells * CELL_W + CELL_W * 0.5;
+    const meleeRange = attackRangeCells * CELL_W + CELL_W * 0.4;
 
     const unit: UnitData = {
-      sprite,
-      hp, maxHp: hp, displayHp: hp,
-      damage,
-      attackRange: meleeRange,
-      meleeRange,
-      state: "idle",
-      cooldownTimer: 0,
-      attackDuration,
-      direction,
-      hpBar: this.add.graphics().setDepth(50),
-      teamColor,
-      unitType,
-      team,
-      speed,
-      gridCell: cell,
-      abilities,
+      sprite, hp, maxHp: hp, displayHp: hp, damage,
+      attackRange: meleeRange, meleeRange,
+      state: "idle", cooldownTimer: 0, attackDuration,
+      direction, hpBar: this.add.graphics().setDepth(50),
+      teamColor, unitType, team, speed,
+      gridCell: cell, abilities,
     };
 
     this.hookUnitEvents(unit);
@@ -369,8 +376,10 @@ export class MainScene extends Phaser.Scene {
     }
 
     if (unit.unitType === "lancer") {
-      const onLancerComplete = () => {
+      const onLancerComplete = (animKey: string) => {
         if (unit.state === "dead") return;
+        // Only fire on lancer attack anims
+        if (!animKey.includes("lancer-") || !animKey.includes("-attack")) return;
         const enemies = this.enemiesOf(unit);
         const primary = this.nearestAlive(unit, enemies);
         if (primary) {
@@ -380,10 +389,30 @@ export class MainScene extends Phaser.Scene {
           }
         }
         this.setState(unit, "cooldown");
-        unit.cooldownTimer = unit.attackDuration + 400; // slower attack cycle
+        unit.cooldownTimer = unit.attackDuration + 400;
       };
-      unit.sprite.on("animationcomplete-lancer-right-attack", onLancerComplete);
-      unit.sprite.on("animationcomplete-lancer-up-attack",    onLancerComplete);
+      // Listen to all lancer attack animation completions
+      unit.sprite.on("animationcomplete", (anim: Phaser.Animations.Animation) => {
+        onLancerComplete(anim.key);
+      });
+    }
+  }
+
+  // ── Compute lancer facing direction string ────────────────────────────────
+  private computeLancerDirection(unit: UnitData, target: UnitData): string {
+    const dx = target.sprite.x - unit.sprite.x;
+    const dy = target.sprite.y - unit.sprite.y;
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
+
+    // Determine if target is more horizontal or vertical
+    if (absDy < absDx * 0.3) {
+      return "right"; // nearly horizontal — use right (flipped for left)
+    } else if (absDx < absDy * 0.3) {
+      return dy < 0 ? "up" : "down";
+    } else {
+      // Diagonal
+      return dy < 0 ? "upright" : "downright";
     }
   }
 
@@ -415,31 +444,24 @@ export class MainScene extends Phaser.Scene {
     }
   }
 
-  // ── Melee damage (shared) ─────────────────────────────────────────────────
+  // ── Melee damage ──────────────────────────────────────────────────────────
   private applyMeleeDamage(attacker: UnitData, target: UnitData) {
     if (target.state === "dead") return;
     target.hp -= attacker.damage;
-
-    // Lunge forward
-    const lungeX = attacker.sprite.x + attacker.direction * 14;
+    const lungeX = attacker.sprite.x + attacker.direction * 10;
     this.tweens.add({ targets: attacker.sprite, x: lungeX, duration: 80, yoyo: true, ease: "Power2" });
-
-    // Knockback target
-    this.tweens.add({ targets: target.sprite, x: target.sprite.x + attacker.direction * 18, duration: 120, yoyo: true, ease: "Power1" });
-
-    // Flash
+    this.tweens.add({ targets: target.sprite, x: target.sprite.x + attacker.direction * 14, duration: 120, yoyo: true, ease: "Power1" });
     target.sprite.setTint(0xffffff);
     this.time.delayedCall(120, () => { if (target.state !== "dead") target.sprite.clearTint(); });
-
     if (target.hp <= 0) { target.hp = 0; this.setState(target, "dead"); }
   }
 
   // ── Arrow ─────────────────────────────────────────────────────────────────
   spawnArrow(attacker: UnitData, target: UnitData) {
-    const arrowSprite = this.add.sprite(attacker.sprite.x, attacker.sprite.y - 50, "arrow").setDepth(25);
-    arrowSprite.setScale(0.55);
+    const arrowSprite = this.add.sprite(attacker.sprite.x, attacker.sprite.y - 35, "arrow").setDepth(25);
+    arrowSprite.setScale(0.45);
     const dx = target.sprite.x - arrowSprite.x;
-    const dy = (target.sprite.y - 20) - arrowSprite.y;
+    const dy = (target.sprite.y - 15) - arrowSprite.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     const grav = 400;
     const ft   = Math.max(dist / 250, 0.3);
@@ -452,10 +474,8 @@ export class MainScene extends Phaser.Scene {
 
   // ── Death ─────────────────────────────────────────────────────────────────
   private applyDeath(unit: UnitData) {
-    // Free the grid cell
     if (unit.gridCell && unit.gridCell.occupant === unit) unit.gridCell.occupant = null;
     unit.gridCell = null;
-
     unit.sprite.stop();
     unit.sprite.setTint(0xff4444);
     this.tweens.add({
@@ -468,16 +488,13 @@ export class MainScene extends Phaser.Scene {
   drawHpBar(unit: UnitData) {
     unit.displayHp += (unit.hp - unit.displayHp) * 0.08;
     if (Math.abs(unit.displayHp - unit.hp) < 0.5) unit.displayHp = unit.hp;
-
     const g  = unit.hpBar;
     g.clear();
-    const W  = 44, H = 4;
+    const W = 36, H = 3;
     const bx = unit.sprite.x - W / 2;
-    const by = unit.sprite.y - (unit.unitType === "warrior" ? 72 : unit.unitType === "lancer" ? 68 : 65);
-
+    const by = unit.sprite.y - 48;
     g.fillStyle(0x1a1a2e, 0.9);  g.fillRoundedRect(bx - 1, by - 1, W + 2, H + 2, 2);
     g.fillStyle(0x333344, 1);    g.fillRoundedRect(bx, by, W, H, 2);
-
     const dispRatio   = unit.displayHp / unit.maxHp;
     const actualRatio = unit.hp / unit.maxHp;
     if (dispRatio > actualRatio) {
@@ -511,9 +528,9 @@ export class MainScene extends Phaser.Scene {
     const dist = Phaser.Math.Distance.Between(unit.sprite.x, unit.sprite.y, target.sprite.x, target.sprite.y);
 
     switch (unit.unitType) {
-      case "archer":  this.updateArcher(unit, target, dist);          break;
-      case "warrior": this.updateWarrior(unit, target, dist);         break;
-      case "lancer":  this.updateLancer(unit, target, dist);          break;
+      case "archer":  this.updateArcher(unit, target, dist);  break;
+      case "warrior": this.updateWarrior(unit, target, dist); break;
+      case "lancer":  this.updateLancer(unit, target, dist);  break;
     }
   }
 
@@ -539,11 +556,19 @@ export class MainScene extends Phaser.Scene {
 
   // ── Lancer AI ─────────────────────────────────────────────────────────────
   private updateLancer(unit: UnitData, target: UnitData, dist: number) {
+    // Update facing direction toward target
+    if (target.sprite.x > unit.sprite.x) { unit.direction = 1; unit.sprite.setFlipX(false); }
+    else { unit.direction = -1; unit.sprite.setFlipX(true); }
+
     if (dist > unit.attackRange) {
       if (unit.state !== "moving") this.setState(unit, "moving");
       this.moveUnitToward(unit, target.sprite.x, target.sprite.y);
     } else {
-      if (unit.state === "idle" || unit.state === "moving") this.setState(unit, "attacking");
+      if (unit.state === "idle" || unit.state === "moving") {
+        // Compute directional anim before attacking
+        (unit as any)._atkDir = this.computeLancerDirection(unit, target);
+        this.setState(unit, "attacking");
+      }
     }
   }
 
@@ -560,17 +585,13 @@ export class MainScene extends Phaser.Scene {
     const newX = unit.sprite.x + nx;
     const newY = unit.sprite.y + ny;
 
-    // Update grid occupancy when crossing cell boundary
     const newCell = this.worldToCell(newX, newY);
     if (newCell && newCell !== unit.gridCell) {
       if (!newCell.occupant || newCell.occupant === unit) {
-        // Vacate old cell
         if (unit.gridCell && unit.gridCell.occupant === unit) unit.gridCell.occupant = null;
         newCell.occupant = unit;
         unit.gridCell    = newCell;
-      }
-      // else: cell occupied — don't move into it
-      else return;
+      } else return;
     }
 
     unit.sprite.x = newX;
@@ -615,7 +636,6 @@ export class MainScene extends Phaser.Scene {
     this.teamRed   = [];
     this.arrows    = [];
     this.battleStarted = false;
-    // Reset grid occupancy
     for (const row of this.grid) for (const cell of row) cell.occupant = null;
     this.drawGrid();
     this.placementText.setVisible(true);
@@ -643,15 +663,15 @@ export class MainScene extends Phaser.Scene {
 
       const t    = arrow.targetUnit;
       const adx  = arrow.sprite.x - t.sprite.x;
-      const ady  = arrow.sprite.y - (t.sprite.y - 20);
+      const ady  = arrow.sprite.y - (t.sprite.y - 15);
       const adist = Math.sqrt(adx * adx + ady * ady);
 
-      if (adist < 28 || arrow.sprite.x < -50 || arrow.sprite.x > GAME_W + 50 || arrow.sprite.y > GAME_H + 50) {
-        if (adist < 28 && t.state !== "dead") {
+      if (adist < 22 || arrow.sprite.x < -50 || arrow.sprite.x > GAME_W + 50 || arrow.sprite.y > GAME_H + 50) {
+        if (adist < 22 && t.state !== "dead") {
           t.hp -= arrow.damage;
           t.sprite.setTint(0xffffff);
           this.time.delayedCall(100, () => { if (t.state !== "dead") t.sprite.clearTint(); });
-          this.tweens.add({ targets: t.sprite, x: t.sprite.x + (arrow.vx > 0 ? 1 : -1) * 6, duration: 50, yoyo: true });
+          this.tweens.add({ targets: t.sprite, x: t.sprite.x + (arrow.vx > 0 ? 1 : -1) * 5, duration: 50, yoyo: true });
           if (t.hp <= 0) { t.hp = 0; this.setState(t, "dead"); }
         }
         arrow.sprite.destroy();

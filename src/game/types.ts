@@ -57,8 +57,8 @@ export interface ArrowProjectile {
 // ── Grid constants ─────────────────────────────────────────────────────────────
 export const GRID_COLS   = 10;
 export const GRID_ROWS   = 6;
-export const GAME_W      = 800;
-export const GAME_H      = 600;
+export const GAME_W      = 720;
+export const GAME_H      = 480;
 // Grid occupies the full canvas; HUD is rendered in React overlay
-export const CELL_W      = GAME_W / GRID_COLS;   // 80
-export const CELL_H      = GAME_H / GRID_ROWS;   // 100
+export const CELL_W      = GAME_W / GRID_COLS;   // 72
+export const CELL_H      = GAME_H / GRID_ROWS;   // 80
