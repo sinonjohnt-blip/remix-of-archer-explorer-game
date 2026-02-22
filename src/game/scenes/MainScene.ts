@@ -128,8 +128,8 @@ export class MainScene extends Phaser.Scene {
     // Monk
     this.load.spritesheet("m-idle",        "/assets/Monk_Idle.png",        { frameWidth: MONK_FRAME, frameHeight: MONK_FRAME });
     this.load.spritesheet("m-run",         "/assets/Monk_Run.png",         { frameWidth: MONK_FRAME, frameHeight: MONK_FRAME });
-    this.load.spritesheet("m-heal",        "/assets/Monk_Heal.png",        { frameWidth: MONK_FRAME, frameHeight: MONK_FRAME });
-    this.load.spritesheet("m-heal-effect", "/assets/Monk_Heal_Effect.png", { frameWidth: MONK_FRAME, frameHeight: MONK_FRAME });
+    this.load.image("m-heal-img",          "/assets/Monk_Heal.png");
+    this.load.image("m-heal-effect-img",   "/assets/Monk_Heal_Effect.png");
 
     // Lancer — all directions
     this.load.spritesheet("l-idle",             "/assets/Lancer_Idle.png",             { frameWidth: LANCER_IDLE_FRAME, frameHeight: LANCER_IDLE_FRAME });
@@ -287,8 +287,8 @@ export class MainScene extends Phaser.Scene {
   // ── Animations ────────────────────────────────────────────────────────────
   private createAnims() {
     const def = (key: string, tex: string, start: number, end: number, rate = 8, repeat = -1) => {
-      if (!this.anims.exists(key))
-        this.anims.create({ key, frames: this.anims.generateFrameNumbers(tex, { start, end }), frameRate: rate, repeat });
+      if (this.anims.exists(key)) this.anims.remove(key);
+      this.anims.create({ key, frames: this.anims.generateFrameNumbers(tex, { start, end }), frameRate: rate, repeat });
     };
 
     // Archer
@@ -317,13 +317,34 @@ export class MainScene extends Phaser.Scene {
     def("lancer-downright-attack", "l-downright-attack", 0, 2,  10, 0);
     def("lancer-downright-guard",  "l-downright-guard",  0, 5,  8);
 
-    // Monk — detect frame counts from spritesheet dimensions
-    const monkHealFrames = this.textures.get("m-heal").frameTotal - 1;
-    const monkHealEffectFrames = this.textures.get("m-heal-effect").frameTotal - 1;
-    def("monk-idle",        "m-idle",        0, 5);
-    def("monk-run",         "m-run",         0, 3);
-    def("monk-heal",        "m-heal",        0, Math.max(0, monkHealFrames - 1), 8, 0);
-    def("monk-heal-effect", "m-heal-effect", 0, Math.max(0, monkHealEffectFrames - 1), 8, 0);
+    // Monk — dynamically create spritesheets from loaded images for heal sprites
+    const miFrames = Math.max(1, this.textures.get("m-idle").frameTotal - 1);
+    const mrFrames = Math.max(1, this.textures.get("m-run").frameTotal - 1);
+    def("monk-idle",        "m-idle",        0, miFrames - 1);
+    def("monk-run",         "m-run",         0, mrFrames - 1);
+
+    // Heal sprites: detect frame size from image dimensions, create spritesheets dynamically
+    const healKeys = [
+      { imgKey: "m-heal-img", ssKey: "m-heal", animKey: "monk-heal" },
+      { imgKey: "m-heal-effect-img", ssKey: "m-heal-effect", animKey: "monk-heal-effect" },
+    ];
+    for (const { imgKey, ssKey, animKey } of healKeys) {
+      const src = this.textures.get(imgKey).getSourceImage() as HTMLImageElement;
+      const h = src.height;
+      const w = src.width;
+      const frameSize = h; // assume square frames, height = frame size
+      const numFrames = Math.floor(w / frameSize);
+      if (!this.textures.exists(ssKey)) {
+        this.textures.addSpriteSheet(ssKey, src, { frameWidth: frameSize, frameHeight: frameSize });
+      }
+      if (this.anims.exists(animKey)) this.anims.remove(animKey);
+      this.anims.create({
+        key: animKey,
+        frames: this.anims.generateFrameNumbers(ssKey, { start: 0, end: Math.max(0, numFrames - 1) }),
+        frameRate: 8,
+        repeat: 0,
+      });
+    }
   }
 
   // ── Spawn unit ────────────────────────────────────────────────────────────
@@ -484,9 +505,19 @@ export class MainScene extends Phaser.Scene {
         setLancerScale(false);
         unit.sprite.play(unit.abilities.attackAnim(unit), true);
         break;
-      case "healing":
-        unit.sprite.play("monk-heal", true);
+      case "healing": {
+        // Switch sprite texture to heal sheet before playing animation
+        const healAnim = this.anims.get("monk-heal");
+        if (healAnim && healAnim.frames.length > 0) {
+          unit.sprite.play("monk-heal", true);
+        } else {
+          console.error("monk-heal anim missing or has no frames!", healAnim);
+          // Fallback: skip to cooldown
+          unit.state = "cooldown";
+          unit.cooldownTimer = MONK_HEAL_COOLDOWN;
+        }
         break;
+      }
       case "cooldown":
         setLancerScale(false);
         unit.sprite.play(unit.abilities.cooldownAnim(unit), true);
@@ -758,10 +789,9 @@ export class MainScene extends Phaser.Scene {
           if (this.anims.exists("monk-heal-effect")) {
             fx.play("monk-heal-effect");
             fx.once("animationcomplete", () => fx.destroy());
-          } else {
-            // Fallback: just flash and remove
-            this.time.delayedCall(500, () => fx.destroy());
           }
+          // Always destroy after a timeout as safety net
+          this.time.delayedCall(1200, () => { if (fx && fx.active) fx.destroy(); });
         } catch (e) {
           // Silently handle FX failure — heal still applies
         }
