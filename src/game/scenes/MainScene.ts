@@ -317,11 +317,13 @@ export class MainScene extends Phaser.Scene {
     def("lancer-downright-attack", "l-downright-attack", 0, 2,  10, 0);
     def("lancer-downright-guard",  "l-downright-guard",  0, 5,  8);
 
-    // Monk
+    // Monk — detect frame counts from spritesheet dimensions
+    const monkHealFrames = this.textures.get("m-heal").frameTotal - 1;
+    const monkHealEffectFrames = this.textures.get("m-heal-effect").frameTotal - 1;
     def("monk-idle",        "m-idle",        0, 5);
     def("monk-run",         "m-run",         0, 3);
-    def("monk-heal",        "m-heal",        0, 11, 8, 0);
-    def("monk-heal-effect", "m-heal-effect", 0, 11, 8, 0);
+    def("monk-heal",        "m-heal",        0, Math.max(0, monkHealFrames - 1), 8, 0);
+    def("monk-heal-effect", "m-heal-effect", 0, Math.max(0, monkHealEffectFrames - 1), 8, 0);
   }
 
   // ── Spawn unit ────────────────────────────────────────────────────────────
@@ -740,19 +742,29 @@ export class MainScene extends Phaser.Scene {
 
       // Spawn heal effect on target after cast delay
       this.time.delayedCall(MONK_CAST_DELAY, () => {
-        if (unit.state === "dead" || !bestTarget || bestTarget.state === "dead") {
-          if (unit.state !== "dead") this.setState(unit, "idle");
+        if (unit.state === "dead") return;
+        if (!bestTarget || bestTarget.state === "dead") {
+          this.setState(unit, "idle");
           return;
         }
         // Apply heal
         bestTarget.hp = Math.min(bestTarget.maxHp, bestTarget.hp + MONK_HEAL_AMOUNT);
 
         // Spawn heal effect sprite on target position
-        const fx = this.add.sprite(bestTarget.sprite.x, bestTarget.sprite.y, "m-heal-effect")
-          .setScale(SPRITE_SCALE["monk"])
-          .setDepth(55);
-        fx.play("monk-heal-effect");
-        fx.once("animationcomplete", () => fx.destroy());
+        try {
+          const fx = this.add.sprite(bestTarget.sprite.x, bestTarget.sprite.y, "m-heal-effect")
+            .setScale(SPRITE_SCALE["monk"])
+            .setDepth(55);
+          if (this.anims.exists("monk-heal-effect")) {
+            fx.play("monk-heal-effect");
+            fx.once("animationcomplete", () => fx.destroy());
+          } else {
+            // Fallback: just flash and remove
+            this.time.delayedCall(500, () => fx.destroy());
+          }
+        } catch (e) {
+          // Silently handle FX failure — heal still applies
+        }
 
         // Enter cooldown
         this.setState(unit, "cooldown");
