@@ -13,7 +13,7 @@ const DISPLAY_SIZE = 36;
 const units: { type: UnitType; label: string; sprite: string; cost: number; frames: number; frameSize: number; iconScale?: number }[] = [
   { type: "archer",  label: "Archer",  sprite: "/assets/Archer_Idle.png",  cost: 50,  frames: 6,  frameSize: 192 },
   { type: "warrior", label: "Warrior", sprite: "/assets/Warrior_Idle.png", cost: 80,  frames: 8,  frameSize: 192 },
-  { type: "lancer",  label: "Lancer",  sprite: "/assets/Lancer_Idle.png",  cost: 100, frames: 12, frameSize: 160, iconScale: 3.0 },
+  { type: "lancer",  label: "Lancer",  sprite: "/assets/Lancer_Idle.png",  cost: 100, frames: 12, frameSize: 160, iconScale: 2.2 },
   { type: "monk",    label: "Monk",    sprite: "/assets/Monk_Idle.png",    cost: 60,  frames: 6,  frameSize: 192 },
 ];
 
