@@ -10,10 +10,10 @@ interface UnitSelectorProps {
 
 const DISPLAY_SIZE = 36;
 
-const units: { type: UnitType; label: string; sprite: string; cost: number; frames: number; frameSize: number }[] = [
+const units: { type: UnitType; label: string; sprite: string; cost: number; frames: number; frameSize: number; iconScale?: number }[] = [
   { type: "archer",  label: "Archer",  sprite: "/assets/Archer_Idle.png",  cost: 50,  frames: 6,  frameSize: 192 },
   { type: "warrior", label: "Warrior", sprite: "/assets/Warrior_Idle.png", cost: 80,  frames: 8,  frameSize: 192 },
-  { type: "lancer",  label: "Lancer",  sprite: "/assets/Lancer_Idle.png",  cost: 100, frames: 12, frameSize: 160 },
+  { type: "lancer",  label: "Lancer",  sprite: "/assets/Lancer_Idle.png",  cost: 100, frames: 12, frameSize: 160, iconScale: 3.0 },
   { type: "monk",    label: "Monk",    sprite: "/assets/Monk_Idle.png",    cost: 60,  frames: 6,  frameSize: 192 },
 ];
 
@@ -28,11 +28,13 @@ const UnitSelector: React.FC<UnitSelectorProps> = ({ selected, onSelect }) => {
       </span>
       {units.map((u) => {
         const isActive = selected === u.type;
-        // Scale: we want one frame to be DISPLAY_SIZE px wide
-        // Total spritesheet width = frames * frameSize
-        // Scaled total width = frames * DISPLAY_SIZE
-        const scaledTotalW = u.frames * DISPLAY_SIZE;
-        const scaledTotalH = DISPLAY_SIZE;
+        const scale = u.iconScale ?? 1;
+        const frameDisplaySize = DISPLAY_SIZE * scale;
+        const scaledTotalW = u.frames * frameDisplaySize;
+        const scaledTotalH = frameDisplaySize;
+        // Offset to center the scaled sprite within the DISPLAY_SIZE box
+        const offsetX = (DISPLAY_SIZE - frameDisplaySize) / 2;
+        const offsetY = (DISPLAY_SIZE - frameDisplaySize) / 2;
         return (
           <button
             key={u.type}
@@ -61,13 +63,25 @@ const UnitSelector: React.FC<UnitSelectorProps> = ({ selected, onSelect }) => {
                 style={{
                   width: DISPLAY_SIZE,
                   height: DISPLAY_SIZE,
-                  backgroundImage: `url(${u.sprite})`,
-                  backgroundSize: `${scaledTotalW}px ${scaledTotalH}px`,
-                  backgroundPosition: "0 0",
-                  backgroundRepeat: "no-repeat",
-                  imageRendering: "pixelated",
+                  overflow: "hidden",
+                  position: "relative",
                 }}
-              />
+              >
+                <div
+                  style={{
+                    position: "absolute",
+                    left: offsetX,
+                    top: offsetY,
+                    width: frameDisplaySize,
+                    height: frameDisplaySize,
+                    backgroundImage: `url(${u.sprite})`,
+                    backgroundSize: `${scaledTotalW}px ${scaledTotalH}px`,
+                    backgroundPosition: "0 0",
+                    backgroundRepeat: "no-repeat",
+                    imageRendering: "pixelated",
+                  }}
+                />
+              </div>
               <span
                 className="text-[10px] font-bold mt-0.5"
                 style={{
