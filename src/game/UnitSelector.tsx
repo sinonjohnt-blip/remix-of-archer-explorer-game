@@ -11,10 +11,11 @@ interface UnitSelectorProps {
 const DISPLAY_SIZE = 36;
 
 const units: { type: UnitType; label: string; sprite: string; cost: number; frames: number; frameSize: number; iconScale?: number }[] = [
-  { type: "archer",  label: "Archer",  sprite: "/assets/Archer_Idle.png",  cost: 50,  frames: 6,  frameSize: 192 },
-  { type: "warrior", label: "Warrior", sprite: "/assets/Warrior_Idle.png", cost: 80,  frames: 8,  frameSize: 192 },
-  { type: "lancer",  label: "Lancer",  sprite: "/assets/Lancer_Idle.png",  cost: 100, frames: 12, frameSize: 160, iconScale: 2.2 },
-  { type: "monk",    label: "Monk",    sprite: "/assets/Monk_Idle.png",    cost: 60,  frames: 6,  frameSize: 192 },
+  { type: "archer",  label: "Archer",  sprite: "/assets/Archer_Idle.png",    cost: 50,  frames: 6,  frameSize: 192 },
+  { type: "warrior", label: "Warrior", sprite: "/assets/Warrior_Idle.png",   cost: 80,  frames: 8,  frameSize: 192 },
+  { type: "lancer",  label: "Lancer",  sprite: "/assets/Lancer_Idle.png",    cost: 100, frames: 12, frameSize: 160, iconScale: 2.2 },
+  { type: "monk",    label: "Monk",    sprite: "/assets/Monk_Idle.png",      cost: 60,  frames: 6,  frameSize: 192 },
+  { type: "pawn",    label: "Pawn",    sprite: "/assets/Pawn_Idle_Axe.png",  cost: 70,  frames: 8,  frameSize: 192 },
 ];
 
 const UnitSelector: React.FC<UnitSelectorProps> = ({ selected, onSelect }) => {
@@ -32,7 +33,6 @@ const UnitSelector: React.FC<UnitSelectorProps> = ({ selected, onSelect }) => {
         const frameDisplaySize = DISPLAY_SIZE * scale;
         const scaledTotalW = u.frames * frameDisplaySize;
         const scaledTotalH = frameDisplaySize;
-        // Offset to center the scaled sprite within the DISPLAY_SIZE box
         const offsetX = (DISPLAY_SIZE - frameDisplaySize) / 2;
         const offsetY = (DISPLAY_SIZE - frameDisplaySize) / 2;
         return (
@@ -58,7 +58,6 @@ const UnitSelector: React.FC<UnitSelectorProps> = ({ selected, onSelect }) => {
                 transition: "all 0.1s",
               }}
             >
-              {/* Miniature unit sprite — first frame via background-image */}
               <div
                 style={{
                   width: DISPLAY_SIZE,

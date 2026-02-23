@@ -5,8 +5,9 @@ import UnitSelector from "./UnitSelector";
 import GoldDisplay from "./GoldDisplay";
 import { MainScene } from "./scenes/MainScene";
 import type { UnitType } from "./types";
+import { GAME_W } from "./types";
 
-const UNIT_COSTS: Record<UnitType, number> = { archer: 50, warrior: 80, lancer: 100, monk: 60 };
+const UNIT_COSTS: Record<UnitType, number> = { archer: 50, warrior: 80, lancer: 100, monk: 60, pawn: 70 };
 const STARTING_GOLD = 500;
 
 const PhaserGame = () => {
@@ -21,8 +22,8 @@ const PhaserGame = () => {
 
     const game = new Phaser.Game({
       type: Phaser.AUTO,
-      width: 720,
-      height: 480,
+      width: 960,
+      height: 576,
       parent: containerRef.current,
       backgroundColor: "#4a6741",
       scene: MainScene,
@@ -30,7 +31,6 @@ const PhaserGame = () => {
     });
     gameRef.current = game;
 
-    // Wait for scene to boot then bind events
     const checkScene = setInterval(() => {
       const s = game.scene.getScene("MainScene") as MainScene;
       if (s?.events) {
@@ -38,6 +38,10 @@ const PhaserGame = () => {
         s.events.on("unit-placed", (data: { team: "blue" | "red"; cost: number }) => {
           if (data.team === "blue") setBlueGold(g => g - data.cost);
           else                      setRedGold(g => g - data.cost);
+        });
+        s.events.on("unit-removed", (data: { team: "blue" | "red"; cost: number }) => {
+          if (data.team === "blue") setBlueGold(g => g + data.cost);
+          else                      setRedGold(g => g + data.cost);
         });
       }
     }, 100);
@@ -70,7 +74,6 @@ const PhaserGame = () => {
     }
   }, [getScene, blueGold, redGold]);
 
-  // Keep gold synced into scene every render
   useEffect(() => {
     const s = getScene();
     if (s) s.goldRef = { blue: blueGold, red: redGold };
@@ -85,7 +88,7 @@ const PhaserGame = () => {
       <div
         className="flex items-center justify-between w-full px-4 py-2 rounded-t-lg border-x-4 border-t-4"
         style={{
-          maxWidth: 720,
+          maxWidth: GAME_W,
           background: "linear-gradient(180deg, hsl(30 18% 16%) 0%, hsl(25 15% 12%) 100%)",
           borderColor: "hsl(30 30% 22%)",
         }}

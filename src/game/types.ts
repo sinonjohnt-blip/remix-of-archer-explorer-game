@@ -1,8 +1,9 @@
 import Phaser from "phaser";
 
-export type UnitType  = "archer" | "warrior" | "lancer" | "monk";
-export type Team      = "blue" | "red";
-export type UnitState = "idle" | "moving" | "attacking" | "cooldown" | "dead" | "healing";
+export type UnitType    = "archer" | "warrior" | "lancer" | "monk" | "pawn";
+export type Team        = "blue" | "red";
+export type UnitState   = "idle" | "moving" | "attacking" | "cooldown" | "dead" | "healing";
+export type PawnWeapon  = "axe" | "knife" | "hammer" | "pickaxe";
 
 // ── Grid ──────────────────────────────────────────────────────────────────────
 export interface GridCell {
@@ -33,6 +34,12 @@ export interface UnitData {
   speed:           number;   // pixels per frame
   gridCell:        GridCell | null;
   abilities:       UnitAbilities;
+  /** Armor value — reduces incoming damage; used by pickaxe pierce */
+  armor:           number;
+  /** Pawn-only: currently equipped weapon */
+  weapon?:         PawnWeapon;
+  /** Pawn-only: ms remaining before weapon can switch again */
+  weaponSwitchCooldown?: number;
 }
 
 // ── Modular ability table (add to this for new units) ─────────────────────────
@@ -54,11 +61,10 @@ export interface ArrowProjectile {
   targetUnit: UnitData;
 }
 
-// ── Grid constants ─────────────────────────────────────────────────────────────
-export const GRID_COLS   = 10;
-export const GRID_ROWS   = 6;
-export const GAME_W      = 720;
-export const GAME_H      = 480;
-// Grid occupies the full canvas; HUD is rendered in React overlay
-export const CELL_W      = GAME_W / GRID_COLS;   // 72
-export const CELL_H      = GAME_H / GRID_ROWS;   // 80
+// ── Grid constants (enlarged 25%+) ────────────────────────────────────────────
+export const GRID_COLS   = 16;
+export const GRID_ROWS   = 8;
+export const GAME_W      = 960;
+export const GAME_H      = 576;
+export const CELL_W      = GAME_W / GRID_COLS;   // 60
+export const CELL_H      = GAME_H / GRID_ROWS;   // 72
