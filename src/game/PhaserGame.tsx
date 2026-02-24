@@ -43,6 +43,10 @@ const PhaserGame = () => {
           if (data.team === "blue") setBlueGold(g => g + data.cost);
           else                      setRedGold(g => g + data.cost);
         });
+        s.events.on("unit-killed", (data: { team: "blue" | "red"; gold: number }) => {
+          if (data.team === "blue") setBlueGold(g => g + data.gold);
+          else                      setRedGold(g => g + data.gold);
+        });
       }
     }, 100);
 

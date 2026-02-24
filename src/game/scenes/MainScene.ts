@@ -19,8 +19,8 @@ const LANCER_IDLE_FRAME = 160;
 const LANCER_FRAME = 320;
 
 // ── Blue team occupies cols 0–half; Red team occupies rest ────────────────────
-const BLUE_MAX_COL = Math.floor(GRID_COLS / 2) - 1;   // 7
-const RED_MIN_COL  = Math.floor(GRID_COLS / 2);        // 8
+const BLUE_MAX_COL = Math.floor(GRID_COLS / 2) - 1;
+const RED_MIN_COL  = Math.floor(GRID_COLS / 2);
 
 // ── Sprite scales (reduced for compact grid) ─────────────────────────────────
 const SPRITE_SCALE: Record<UnitType, number> = {
@@ -32,8 +32,8 @@ const LANCER_ACTION_SCALE = 0.45;
 // ── Pawn weapon stats ────────────────────────────────────────────────────────
 interface PawnWeaponStats {
   damage: number;
-  cooldown: number;        // ms
-  armorPierce: number;     // 0–1, fraction of armor ignored
+  cooldown: number;
+  armorPierce: number;
 }
 const PAWN_WEAPONS: Record<PawnWeapon, PawnWeaponStats> = {
   axe:     { damage: 15, cooldown: 1000, armorPierce: 0 },
@@ -41,7 +41,11 @@ const PAWN_WEAPONS: Record<PawnWeapon, PawnWeaponStats> = {
   hammer:  { damage: 25, cooldown: 1500, armorPierce: 0 },
   pickaxe: { damage: 18, cooldown: 1000, armorPierce: 0.4 },
 };
-const WEAPON_SWITCH_COOLDOWN = 750; // ms
+const WEAPON_SWITCH_COOLDOWN = 750;
+
+// ── Terrain decoration count ─────────────────────────────────────────────────
+const NUM_BUSHES = 6;
+const NUM_ROCKS  = 8;
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Modular ability definitions
@@ -91,7 +95,6 @@ function lancerAbilities(): UnitAbilities {
   };
 }
 
-// ── Monk abilities ───────────────────────────────────────────────────────────
 const MONK_HEAL_RANGE_CELLS = 3;
 const MONK_HEAL_AMOUNT      = 30;
 const MONK_HEAL_COOLDOWN    = 1800;
@@ -105,16 +108,14 @@ function monkAbilities(): UnitAbilities {
   };
 }
 
-// ── Pawn abilities ───────────────────────────────────────────────────────────
 function pawnAbilities(): UnitAbilities {
   return {
     resolveAttack: (_attacker, target) => [target],
     cooldownAnim:  (unit) => `pawn-idle-${unit.weapon ?? "axe"}`,
-    attackAnim:    (unit) => `pawn-idle-${unit.weapon ?? "axe"}`, // reuse idle-weapon as attack anim
+    attackAnim:    (unit) => `pawn-attack-${unit.weapon ?? "axe"}`,
   };
 }
 
-/** Evaluate which weapon the pawn should equip against a target */
 function evaluatePawnWeapon(target: UnitData): PawnWeapon {
   const hpPct = target.hp / target.maxHp;
   if (target.armor > 5)    return "pickaxe";
@@ -136,6 +137,7 @@ export class MainScene extends Phaser.Scene {
   private gridGraphics!: Phaser.GameObjects.Graphics;
   private hoverGraphics!: Phaser.GameObjects.Graphics;
   private placementText!: Phaser.GameObjects.Text;
+  private terrainSprites: Phaser.GameObjects.Image[] = [];
 
   constructor() { super("MainScene"); }
 
@@ -174,7 +176,7 @@ export class MainScene extends Phaser.Scene {
     this.load.spritesheet("l-downright-attack", "/assets/Lancer_DownRight_Attack.png", { frameWidth: LANCER_FRAME, frameHeight: LANCER_FRAME });
     this.load.spritesheet("l-downright-guard",  "/assets/Lancer_DownRight_Defence.png",{ frameWidth: LANCER_FRAME, frameHeight: LANCER_FRAME });
 
-    // Pawn — all weapon variants (idle + run)
+    // Pawn — idle + run for each weapon + base
     this.load.spritesheet("p-idle",         "/assets/Pawn_Idle.png",         { frameWidth: PAWN_FRAME, frameHeight: PAWN_FRAME });
     this.load.spritesheet("p-idle-axe",     "/assets/Pawn_Idle_Axe.png",     { frameWidth: PAWN_FRAME, frameHeight: PAWN_FRAME });
     this.load.spritesheet("p-idle-hammer",  "/assets/Pawn_Idle_Hammer.png",  { frameWidth: PAWN_FRAME, frameHeight: PAWN_FRAME });
@@ -185,6 +187,22 @@ export class MainScene extends Phaser.Scene {
     this.load.spritesheet("p-run-hammer",   "/assets/Pawn_Run_Hammer.png",   { frameWidth: PAWN_FRAME, frameHeight: PAWN_FRAME });
     this.load.spritesheet("p-run-knife",    "/assets/Pawn_Run_Knife.png",    { frameWidth: PAWN_FRAME, frameHeight: PAWN_FRAME });
     this.load.spritesheet("p-run-pickaxe",  "/assets/Pawn_Run_Pickaxe.png",  { frameWidth: PAWN_FRAME, frameHeight: PAWN_FRAME });
+
+    // Pawn — attack (interact) sprites loaded as images for dynamic spritesheet
+    this.load.image("p-atk-axe-img",     "/assets/Pawn_Interact_Axe.png");
+    this.load.image("p-atk-hammer-img",  "/assets/Pawn_Interact_Hammer.png");
+    this.load.image("p-atk-knife-img",   "/assets/Pawn_Interact_Knife.png");
+    this.load.image("p-atk-pickaxe-img", "/assets/Pawn_Interact_Pickaxe.png");
+
+    // Terrain
+    this.load.image("bush1", "/assets/Bushe1.png");
+    this.load.image("rock1", "/assets/Rock1.png");
+    this.load.image("rock2", "/assets/Rock2.png");
+    this.load.image("rock3", "/assets/Rock3.png");
+    this.load.image("rock4", "/assets/Rock4.png");
+
+    // Dust effect
+    this.load.image("dust-img", "/assets/Dust_01.png");
   }
 
   // ── Create ─────────────────────────────────────────────────────────────────
@@ -196,6 +214,7 @@ export class MainScene extends Phaser.Scene {
 
     this.buildGrid();
     this.createAnims();
+    this.spawnTerrain();
 
     this.gridGraphics  = this.add.graphics();
     this.hoverGraphics = this.add.graphics();
@@ -222,10 +241,8 @@ export class MainScene extends Phaser.Scene {
       }
     });
 
-    // Disable right-click context menu on canvas
     this.game.canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
-    // Run dev-mode automated tests
     if (import.meta.env.DEV) {
       this.time.delayedCall(500, () => this.runDevTests());
     }
@@ -246,6 +263,64 @@ export class MainScene extends Phaser.Scene {
       }
       this.grid.push(row);
     }
+  }
+
+  // ── Spawn terrain decorations ─────────────────────────────────────────────
+  private spawnTerrain() {
+    for (const s of this.terrainSprites) s.destroy();
+    this.terrainSprites = [];
+
+    // Bush spritesheet: use first frame only (it's a strip)
+    const bushSrc = this.textures.get("bush1").getSourceImage() as HTMLImageElement;
+    const bushFrameW = bushSrc.height; // assume square frames
+    const bushNumFrames = Math.max(1, Math.floor(bushSrc.width / bushFrameW));
+    if (!this.textures.exists("bush1-ss")) {
+      this.textures.addSpriteSheet("bush1-ss", bushSrc, { frameWidth: bushFrameW, frameHeight: bushFrameW });
+    }
+
+    // Dust spritesheet
+    const dustSrc = this.textures.get("dust-img").getSourceImage() as HTMLImageElement;
+    const dustFrameW = dustSrc.height;
+    const dustNumFrames = Math.max(1, Math.floor(dustSrc.width / dustFrameW));
+    if (!this.textures.exists("dust-ss")) {
+      this.textures.addSpriteSheet("dust-ss", dustSrc, { frameWidth: dustFrameW, frameHeight: dustFrameW });
+    }
+    if (!this.anims.exists("dust-poof")) {
+      this.anims.create({
+        key: "dust-poof",
+        frames: this.anims.generateFrameNumbers("dust-ss", { start: 0, end: Math.max(0, dustNumFrames - 1) }),
+        frameRate: 12, repeat: 0,
+      });
+    }
+
+    // Place bushes (random positions, low depth)
+    for (let i = 0; i < NUM_BUSHES; i++) {
+      const frame = Phaser.Math.Between(0, bushNumFrames - 1);
+      const x = Phaser.Math.Between(40, GAME_W - 40);
+      const y = Phaser.Math.Between(40, GAME_H - 40);
+      const s = this.add.image(x, y, "bush1-ss", frame).setScale(0.5 + Math.random() * 0.3).setDepth(1).setAlpha(0.6);
+      this.terrainSprites.push(s);
+    }
+
+    // Place rocks
+    const rockKeys = ["rock1", "rock2", "rock3", "rock4"];
+    for (let i = 0; i < NUM_ROCKS; i++) {
+      const key = rockKeys[Phaser.Math.Between(0, 3)];
+      const x = Phaser.Math.Between(30, GAME_W - 30);
+      const y = Phaser.Math.Between(30, GAME_H - 30);
+      const s = this.add.image(x, y, key).setScale(0.4 + Math.random() * 0.3).setDepth(1).setAlpha(0.5);
+      this.terrainSprites.push(s);
+    }
+  }
+
+  // ── Spawn dust effect at position ─────────────────────────────────────────
+  private spawnDust(x: number, y: number) {
+    try {
+      const dust = this.add.sprite(x, y + 10, "dust-ss").setScale(0.4).setDepth(5).setAlpha(0.7);
+      dust.play("dust-poof");
+      dust.once("animationcomplete", () => dust.destroy());
+      this.time.delayedCall(1000, () => { if (dust?.active) dust.destroy(); });
+    } catch (_) { /* skip if texture issue */ }
   }
 
   // ── Draw grid ─────────────────────────────────────────────────────────────
@@ -311,14 +386,12 @@ export class MainScene extends Phaser.Scene {
 
   // ── Remove unit (right-click, pre-battle only) ────────────────────────────
   private tryRemoveUnit(px: number, py: number) {
-    if (this.battleStarted) return; // cannot remove during battle
+    if (this.battleStarted) return;
     const cell = this.worldToCell(px, py);
     if (!cell || !cell.occupant) return;
     const unit = cell.occupant;
     const cost = UNIT_COSTS[unit.unitType];
-    // Refund gold
     this.events.emit("unit-removed", { team: unit.team, cost });
-    // Clean up
     cell.occupant = null;
     unit.gridCell = null;
     unit.sprite.destroy();
@@ -418,12 +491,28 @@ export class MainScene extends Phaser.Scene {
       const runF  = Math.max(1, this.textures.get(runTex).frameTotal - 1);
       def(`pawn-idle-${w}`, idleTex, 0, idleF - 1);
       def(`pawn-run-${w}`,  runTex,  0, runF - 1);
-      // Attack reuses idle-weapon at faster rate, non-repeating
-      if (this.anims.exists(`pawn-attack-${w}`)) this.anims.remove(`pawn-attack-${w}`);
+    }
+
+    // Pawn — attack anims from Interact spritesheets (dynamic)
+    const atkKeys: { weapon: PawnWeapon; imgKey: string; ssKey: string }[] = [
+      { weapon: "axe",     imgKey: "p-atk-axe-img",     ssKey: "p-atk-axe" },
+      { weapon: "hammer",  imgKey: "p-atk-hammer-img",  ssKey: "p-atk-hammer" },
+      { weapon: "knife",   imgKey: "p-atk-knife-img",   ssKey: "p-atk-knife" },
+      { weapon: "pickaxe", imgKey: "p-atk-pickaxe-img", ssKey: "p-atk-pickaxe" },
+    ];
+    for (const { weapon, imgKey, ssKey } of atkKeys) {
+      const src = this.textures.get(imgKey).getSourceImage() as HTMLImageElement;
+      const frameSize = src.height;
+      const numFrames = Math.max(1, Math.floor(src.width / frameSize));
+      if (!this.textures.exists(ssKey)) {
+        this.textures.addSpriteSheet(ssKey, src, { frameWidth: frameSize, frameHeight: frameSize });
+      }
+      const animKey = `pawn-attack-${weapon}`;
+      if (this.anims.exists(animKey)) this.anims.remove(animKey);
       this.anims.create({
-        key: `pawn-attack-${w}`,
-        frames: this.anims.generateFrameNumbers(idleTex, { start: 0, end: idleF - 1 }),
-        frameRate: 14, repeat: 0,
+        key: animKey,
+        frames: this.anims.generateFrameNumbers(ssKey, { start: 0, end: Math.max(0, numFrames - 1) }),
+        frameRate: 12, repeat: 0,
       });
     }
   }
@@ -545,8 +634,6 @@ export class MainScene extends Phaser.Scene {
     if (unit.unitType === "pawn") {
       unit.sprite.on("animationcomplete", (anim: Phaser.Animations.Animation) => {
         if (unit.state === "dead") return;
-        if (!anim.key.startsWith("pawn-attack-") && !anim.key.startsWith("pawn-idle-")) return;
-        // Only trigger on attack anims
         if (!anim.key.startsWith("pawn-attack-")) return;
         const target = this.nearestAlive(unit, this.enemiesOf(unit));
         if (target) {
@@ -645,6 +732,8 @@ export class MainScene extends Phaser.Scene {
     const armorReduction = target.armor * (1 - stats.armorPierce);
     const dmg = Math.max(1, stats.damage - armorReduction);
     target.hp -= dmg;
+    // Dust on hit
+    this.spawnDust(target.sprite.x, target.sprite.y);
     // Lunge & knockback
     const lungeX = attacker.sprite.x + attacker.direction * 8;
     this.tweens.add({ targets: attacker.sprite, x: lungeX, duration: 80, yoyo: true, ease: "Power2" });
@@ -657,10 +746,11 @@ export class MainScene extends Phaser.Scene {
   // ── Melee damage (standard) ───────────────────────────────────────────────
   private applyMeleeDamage(attacker: UnitData, target: UnitData) {
     if (target.state === "dead") return;
-    // Apply armor reduction for non-pawn attackers
     const armorReduction = target.armor;
     const dmg = Math.max(1, attacker.damage - armorReduction);
     target.hp -= dmg;
+    // Dust on hit
+    this.spawnDust(target.sprite.x, target.sprite.y);
     const lungeX = attacker.sprite.x + attacker.direction * 10;
     this.tweens.add({ targets: attacker.sprite, x: lungeX, duration: 80, yoyo: true, ease: "Power2" });
     this.tweens.add({ targets: target.sprite, x: target.sprite.x + attacker.direction * 14, duration: 120, yoyo: true, ease: "Power1" });
@@ -685,12 +775,21 @@ export class MainScene extends Phaser.Scene {
     this.arrows.push({ sprite: arrowSprite, vx, vy, gravity: grav, damage: attacker.damage, targetUnit: target });
   }
 
-  // ── Death ─────────────────────────────────────────────────────────────────
+  // ── Death — awards gold to opposing team ──────────────────────────────────
   private applyDeath(unit: UnitData) {
     if (unit.gridCell && unit.gridCell.occupant === unit) unit.gridCell.occupant = null;
     unit.gridCell = null;
     unit.sprite.stop();
     unit.sprite.setTint(0xff4444);
+
+    // Award gold to opposing team based on unit cost
+    const cost = UNIT_COSTS[unit.unitType];
+    const opposingTeam: Team = unit.team === "blue" ? "red" : "blue";
+    this.events.emit("unit-killed", { team: opposingTeam, gold: cost });
+
+    // Dust on death
+    this.spawnDust(unit.sprite.x, unit.sprite.y);
+
     this.tweens.add({
       targets: unit.sprite, alpha: 0, duration: 600,
       onComplete: () => { unit.sprite.setVisible(false); unit.hpBar.clear(); },
@@ -724,9 +823,7 @@ export class MainScene extends Phaser.Scene {
   private updateUnit(unit: UnitData, delta: number) {
     if (unit.state === "dead") return;
 
-    // Monk has its own update logic
     if (unit.unitType === "monk") { this.updateMonk(unit, delta); return; }
-    // Pawn has its own update logic
     if (unit.unitType === "pawn") { this.updatePawn(unit, delta); return; }
 
     if (unit.state === "cooldown") {
@@ -749,7 +846,6 @@ export class MainScene extends Phaser.Scene {
     }
   }
 
-  // ── Archer AI ─────────────────────────────────────────────────────────────
   private updateArcher(unit: UnitData, target: UnitData, dist: number) {
     if (dist > unit.attackRange) {
       if (unit.state !== "moving") this.setState(unit, "moving");
@@ -759,7 +855,6 @@ export class MainScene extends Phaser.Scene {
     }
   }
 
-  // ── Warrior AI ────────────────────────────────────────────────────────────
   private updateWarrior(unit: UnitData, target: UnitData, dist: number) {
     if (dist > unit.meleeRange) {
       if (unit.state !== "moving") this.setState(unit, "moving");
@@ -769,7 +864,6 @@ export class MainScene extends Phaser.Scene {
     }
   }
 
-  // ── Lancer AI ─────────────────────────────────────────────────────────────
   private updateLancer(unit: UnitData, target: UnitData, dist: number) {
     if (target.sprite.x > unit.sprite.x) { unit.direction = 1; unit.sprite.setFlipX(false); }
     else { unit.direction = -1; unit.sprite.setFlipX(true); }
@@ -788,7 +882,6 @@ export class MainScene extends Phaser.Scene {
   private updatePawn(unit: UnitData, delta: number) {
     if (unit.state === "dead") return;
 
-    // Tick weapon switch cooldown
     if (unit.weaponSwitchCooldown && unit.weaponSwitchCooldown > 0) {
       unit.weaponSwitchCooldown -= delta;
     }
@@ -798,13 +891,12 @@ export class MainScene extends Phaser.Scene {
       if (unit.cooldownTimer <= 0) this.setState(unit, "idle");
       return;
     }
-    if (unit.state === "attacking") return; // wait for anim complete
+    if (unit.state === "attacking") return;
 
     const enemies = this.enemiesOf(unit);
     const target  = this.nearestAlive(unit, enemies);
     if (!target) { if (unit.state !== "idle") this.setState(unit, "idle"); return; }
 
-    // Face target
     if (target.sprite.x > unit.sprite.x) { unit.direction = 1; unit.sprite.setFlipX(false); }
     else { unit.direction = -1; unit.sprite.setFlipX(true); }
 
@@ -814,7 +906,6 @@ export class MainScene extends Phaser.Scene {
       if (unit.state !== "moving") this.setState(unit, "moving");
       this.moveUnitToward(unit, target.sprite.x, target.sprite.y);
     } else {
-      // In melee range — evaluate weapon switch, then attack
       const desiredWeapon = evaluatePawnWeapon(target);
       if (desiredWeapon !== unit.weapon && (!unit.weaponSwitchCooldown || unit.weaponSwitchCooldown <= 0)) {
         unit.weapon = desiredWeapon;
@@ -826,7 +917,7 @@ export class MainScene extends Phaser.Scene {
     }
   }
 
-  // ── Grid-aware movement ────────────────────────────────────────────────────
+  // ── Movement — FREE during battle (no grid occupancy check), grid-locked for placement ──
   private moveUnitToward(unit: UnitData, targetX: number, targetY: number) {
     const dx  = targetX - unit.sprite.x;
     const dy  = targetY - unit.sprite.y;
@@ -839,42 +930,34 @@ export class MainScene extends Phaser.Scene {
     let newX = unit.sprite.x + nx;
     let newY = unit.sprite.y + ny;
 
+    // Clamp to world bounds
+    newX = Phaser.Math.Clamp(newX, 10, GAME_W - 10);
+    newY = Phaser.Math.Clamp(newY, 10, GAME_H - 10);
+
+    // During battle: free movement, units can overlap — just update grid cell tracking
+    if (this.battleStarted) {
+      unit.sprite.x = newX;
+      unit.sprite.y = newY;
+      // Update grid cell for reference (targeting, etc.) but don't block
+      const newCell = this.worldToCell(newX, newY);
+      if (newCell && newCell !== unit.gridCell) {
+        // Clear old cell if we were occupant
+        if (unit.gridCell && unit.gridCell.occupant === unit) unit.gridCell.occupant = null;
+        // Only claim cell if empty (soft tracking)
+        if (!newCell.occupant) newCell.occupant = unit;
+        unit.gridCell = newCell;
+      }
+      unit.sprite.setDepth(10 + Math.floor(unit.sprite.y / CELL_H));
+      return;
+    }
+
+    // Pre-battle: strict grid occupancy (shouldn't happen since units don't move pre-battle)
     const newCell = this.worldToCell(newX, newY);
     if (newCell && newCell !== unit.gridCell) {
       if (!newCell.occupant || newCell.occupant === unit) {
         if (unit.gridCell && unit.gridCell.occupant === unit) unit.gridCell.occupant = null;
         newCell.occupant = unit;
         unit.gridCell    = newCell;
-      } else if (newCell.occupant.team === unit.team) {
-        const curRow = unit.gridCell?.row ?? Math.floor(unit.sprite.y / CELL_H);
-        const curCol = unit.gridCell?.col ?? Math.floor(unit.sprite.x / CELL_W);
-        const offsets = dy > 5 ? [1, -1] : dy < -5 ? [-1, 1] : (Math.random() < 0.5 ? [1, -1] : [-1, 1]);
-        let moved = false;
-        for (const off of offsets) {
-          const tryRow = curRow + off;
-          if (tryRow < 0 || tryRow >= GRID_ROWS) continue;
-          const colCandidates = [curCol, curCol + unit.direction];
-          for (const tryCol of colCandidates) {
-            if (tryCol < 0 || tryCol >= GRID_COLS) continue;
-            const slideCell = this.grid[tryRow][tryCol];
-            if (!slideCell.occupant || slideCell.occupant === unit) {
-              if (unit.gridCell && unit.gridCell.occupant === unit) unit.gridCell.occupant = null;
-              slideCell.occupant = unit;
-              unit.gridCell = slideCell;
-              const sdx = slideCell.worldX - unit.sprite.x;
-              const sdy = slideCell.worldY - unit.sprite.y;
-              const slen = Math.sqrt(sdx * sdx + sdy * sdy);
-              if (slen > 1) {
-                newX = unit.sprite.x + (sdx / slen) * unit.speed;
-                newY = unit.sprite.y + (sdy / slen) * unit.speed * 0.6;
-              }
-              moved = true;
-              break;
-            }
-          }
-          if (moved) break;
-        }
-        if (!moved) return;
       } else {
         return;
       }
@@ -945,7 +1028,6 @@ export class MainScene extends Phaser.Scene {
     }
   }
 
-  // ── Grid distance helper ──────────────────────────────────────────────────
   private gridDistance(a: UnitData, b: UnitData): number {
     if (!a.gridCell || !b.gridCell) {
       return Phaser.Math.Distance.Between(a.sprite.x, a.sprite.y, b.sprite.x, b.sprite.y) / CELL_W;
@@ -955,7 +1037,6 @@ export class MainScene extends Phaser.Scene {
     return Math.max(dc, dr);
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
   enemiesOf(unit: UnitData): UnitData[] {
     return unit.team === "blue" ? this.teamRed : this.teamBlue;
   }
@@ -997,13 +1078,13 @@ export class MainScene extends Phaser.Scene {
     this.placementText.setVisible(true);
   }
 
+
   // ── Dev-mode automated tests ──────────────────────────────────────────────
   private runDevTests() {
     console.log("%c[DEV TEST] Starting Pawn weapon-switching & pathing tests…", "color: #ffcc00; font-weight: bold;");
     let passed = 0;
     let failed = 0;
 
-    // Test weapon evaluation logic
     const mockUnit = (hp: number, maxHp: number, armor: number): UnitData => ({
       hp, maxHp, armor, displayHp: hp, damage: 10, attackRange: 60, meleeRange: 60,
       state: "idle", cooldownTimer: 0, attackDuration: 500, direction: 1,
@@ -1014,43 +1095,42 @@ export class MainScene extends Phaser.Scene {
 
     // High HP → hammer
     const t1 = mockUnit(90, 100, 0);
-    const w1 = evaluatePawnWeapon(t1);
-    if (w1 === "hammer") { passed++; } else { failed++; console.error(`[DEV TEST FAIL] High HP: expected hammer, got ${w1}`); }
+    if (evaluatePawnWeapon(t1) === "hammer") passed++; else { failed++; console.error("[FAIL] High HP: expected hammer"); }
 
     // Low HP → knife
     const t2 = mockUnit(20, 100, 0);
-    const w2 = evaluatePawnWeapon(t2);
-    if (w2 === "knife") { passed++; } else { failed++; console.error(`[DEV TEST FAIL] Low HP: expected knife, got ${w2}`); }
+    if (evaluatePawnWeapon(t2) === "knife") passed++; else { failed++; console.error("[FAIL] Low HP: expected knife"); }
 
     // High armor → pickaxe
     const t3 = mockUnit(50, 100, 10);
-    const w3 = evaluatePawnWeapon(t3);
-    if (w3 === "pickaxe") { passed++; } else { failed++; console.error(`[DEV TEST FAIL] High armor: expected pickaxe, got ${w3}`); }
+    if (evaluatePawnWeapon(t3) === "pickaxe") passed++; else { failed++; console.error("[FAIL] High armor: expected pickaxe"); }
 
     // Default → axe
     const t4 = mockUnit(50, 100, 0);
-    const w4 = evaluatePawnWeapon(t4);
-    if (w4 === "axe") { passed++; } else { failed++; console.error(`[DEV TEST FAIL] Default: expected axe, got ${w4}`); }
+    if (evaluatePawnWeapon(t4) === "axe") passed++; else { failed++; console.error("[FAIL] Default: expected axe"); }
 
-    // Pathing: ensure grid cells don't allow overlapping occupants
+    // Grid occupancy test
     const testCell = this.grid[0][0];
-    const originalOccupant = testCell.occupant;
+    const origOcc = testCell.occupant;
     testCell.occupant = mockUnit(100, 100, 0);
-    const secondUnit = mockUnit(100, 100, 0);
-    // Simulate placement check
-    const canPlace = !testCell.occupant;
-    if (!canPlace) { passed++; } else { failed++; console.error("[DEV TEST FAIL] Occupied cell should reject placement"); }
-    testCell.occupant = originalOccupant; // restore
+    if (!!testCell.occupant) passed++; else { failed++; console.error("[FAIL] Occupied cell check"); }
+    testCell.occupant = origOcc;
 
     // Armor pierce math
     const pierceResult = Math.max(1, PAWN_WEAPONS.pickaxe.damage - (10 * (1 - PAWN_WEAPONS.pickaxe.armorPierce)));
     const noPierceResult = Math.max(1, PAWN_WEAPONS.axe.damage - 10);
-    if (pierceResult > noPierceResult) { passed++; } else { failed++; console.error("[DEV TEST FAIL] Pickaxe should deal more damage vs armored targets"); }
+    if (pierceResult > noPierceResult) passed++; else { failed++; console.error("[FAIL] Pickaxe should beat axe vs armor"); }
+
+    // Verify attack anims exist
+    const atkAnims = ["pawn-attack-axe", "pawn-attack-hammer", "pawn-attack-knife", "pawn-attack-pickaxe"];
+    for (const a of atkAnims) {
+      if (this.anims.exists(a)) passed++; else { failed++; console.error(`[FAIL] Missing anim: ${a}`); }
+    }
 
     if (failed === 0) {
       console.log(`%c[DEV TEST] All ${passed} tests PASSED ✓`, "color: #88ff88; font-weight: bold;");
     } else {
-      console.error(`[DEV TEST] ${failed} tests FAILED, ${passed} passed`);
+      console.error(`[DEV TEST] ${failed} FAILED, ${passed} passed`);
     }
   }
 
@@ -1079,7 +1159,6 @@ export class MainScene extends Phaser.Scene {
       const adist = Math.sqrt(adx * adx + ady * ady);
       if (adist < 22 || arrow.sprite.x < -50 || arrow.sprite.x > GAME_W + 50 || arrow.sprite.y > GAME_H + 50) {
         if (adist < 22 && t.state !== "dead") {
-          // Arrow damage also respects armor
           const armorReduction = t.armor;
           const dmg = Math.max(1, arrow.damage - armorReduction);
           t.hp -= dmg;
