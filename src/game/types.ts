@@ -61,10 +61,14 @@ export interface ArrowProjectile {
   targetUnit: UnitData;
 }
 
-// ── Grid constants (enlarged 25%+) ────────────────────────────────────────────
-export const GRID_COLS   = 16;
-export const GRID_ROWS   = 8;
+// ── Viewport (canvas) ─────────────────────────────────────────────────────────
 export const GAME_W      = 960;
 export const GAME_H      = 576;
-export const CELL_W      = GAME_W / GRID_COLS;   // 60
-export const CELL_H      = GAME_H / GRID_ROWS;   // 72
+
+// ── Grid constants (expanded world) ───────────────────────────────────────────
+export const GRID_COLS   = 24;
+export const GRID_ROWS   = 14;
+export const CELL_W      = 60;
+export const CELL_H      = 72;
+export const WORLD_W     = GRID_COLS * CELL_W;   // 1440
+export const WORLD_H     = GRID_ROWS * CELL_H;   // 1008

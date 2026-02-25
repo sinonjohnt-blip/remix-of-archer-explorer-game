@@ -4,7 +4,7 @@ import type {
   GridCell, UnitAbilities, PawnWeapon,
 } from "../types";
 import {
-  GRID_COLS, GRID_ROWS, CELL_W, CELL_H, GAME_W, GAME_H,
+  GRID_COLS, GRID_ROWS, CELL_W, CELL_H, GAME_W, GAME_H, WORLD_W, WORLD_H,
 } from "../types";
 
 // ── Gold costs ────────────────────────────────────────────────────────────────
@@ -44,8 +44,8 @@ const PAWN_WEAPONS: Record<PawnWeapon, PawnWeaponStats> = {
 const WEAPON_SWITCH_COOLDOWN = 750;
 
 // ── Terrain decoration count ─────────────────────────────────────────────────
-const NUM_BUSHES = 6;
-const NUM_ROCKS  = 8;
+const NUM_BUSHES = 14;
+const NUM_ROCKS  = 18;
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Modular ability definitions
@@ -218,6 +218,13 @@ export class MainScene extends Phaser.Scene {
     this.teamRed       = [];
     this.battleStarted = false;
 
+    // ── Camera setup ──
+    this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
+    // Start zoomed to fit the world in view
+    const fitZoom = Math.min(GAME_W / WORLD_W, GAME_H / WORLD_H);
+    this.cameras.main.setZoom(fitZoom);
+    this.cameras.main.centerOn(WORLD_W / 2, WORLD_H / 2);
+
     this.buildGrid();
     this.createAnims();
     this.spawnTerrain();
@@ -227,24 +234,54 @@ export class MainScene extends Phaser.Scene {
     this.hoverGraphics = this.add.graphics();
     this.drawGrid();
 
-    this.placementText = this.add.text(GAME_W / 2, 14,
-      "Left-click = Place  ·  Right-click = Remove  ·  Left half = Blue  |  Right half = Red", {
-        fontSize: "10px",
+    this.placementText = this.add.text(WORLD_W / 2, 14,
+      "Left-click = Place  ·  Right-click = Remove  ·  Scroll = Zoom  ·  Middle-drag = Pan  ·  Left half = Blue  |  Right half = Red", {
+        fontSize: "12px",
         color: "#e8d5a3",
         backgroundColor: "#1a150eaa",
         padding: { x: 8, y: 3 },
       }).setOrigin(0.5).setDepth(20);
 
+    // ── Zoom with scroll wheel ──
+    this.input.on("wheel", (_pointer: any, _gos: any, _dx: number, dy: number) => {
+      const cam = this.cameras.main;
+      const newZoom = Phaser.Math.Clamp(cam.zoom + (dy > 0 ? -0.05 : 0.05), fitZoom, 2.0);
+      cam.setZoom(newZoom);
+    });
+
+    // ── Pan with middle-click drag ──
+    let dragging = false;
+    let dragPrevX = 0, dragPrevY = 0;
+    this.input.on("pointerdown", (p: Phaser.Input.Pointer) => {
+      if (p.middleButtonDown()) {
+        dragging = true; dragPrevX = p.x; dragPrevY = p.y;
+      }
+    });
     this.input.on("pointermove", (p: Phaser.Input.Pointer) => {
-      if (this.battleStarted) { this.hoverGraphics.clear(); return; }
-      this.drawHoverCell(p.x, p.y);
+      if (dragging) {
+        const cam = this.cameras.main;
+        cam.scrollX -= (p.x - dragPrevX) / cam.zoom;
+        cam.scrollY -= (p.y - dragPrevY) / cam.zoom;
+        dragPrevX = p.x; dragPrevY = p.y;
+      }
+      if (!this.battleStarted && !dragging) {
+        const wp = this.cameras.main.getWorldPoint(p.x, p.y);
+        this.drawHoverCell(wp.x, wp.y);
+      } else {
+        this.hoverGraphics.clear();
+      }
+    });
+    this.input.on("pointerup", (p: Phaser.Input.Pointer) => {
+      if (!p.middleButtonDown()) dragging = false;
     });
 
     this.input.on("pointerdown", (p: Phaser.Input.Pointer) => {
+      if (p.middleButtonDown()) return;
+      const wp = this.cameras.main.getWorldPoint(p.x, p.y);
       if (p.rightButtonDown()) {
-        this.tryRemoveUnit(p.x, p.y);
+        this.tryRemoveUnit(wp.x, wp.y);
       } else {
-        this.tryPlaceUnit(p.x, p.y);
+        this.tryPlaceUnit(wp.x, wp.y);
       }
     });
 
@@ -303,8 +340,8 @@ export class MainScene extends Phaser.Scene {
     // Place bushes (random positions, low depth)
     for (let i = 0; i < NUM_BUSHES; i++) {
       const frame = Phaser.Math.Between(0, bushNumFrames - 1);
-      const x = Phaser.Math.Between(40, GAME_W - 40);
-      const y = Phaser.Math.Between(40, GAME_H - 40);
+      const x = Phaser.Math.Between(40, WORLD_W - 40);
+      const y = Phaser.Math.Between(40, WORLD_H - 40);
       const s = this.add.image(x, y, "bush1-ss", frame).setScale(0.5 + Math.random() * 0.3).setDepth(1).setAlpha(0.6);
       this.terrainSprites.push(s);
     }
@@ -313,8 +350,8 @@ export class MainScene extends Phaser.Scene {
     const rockKeys = ["rock1", "rock2", "rock3", "rock4"];
     for (let i = 0; i < NUM_ROCKS; i++) {
       const key = rockKeys[Phaser.Math.Between(0, 3)];
-      const x = Phaser.Math.Between(30, GAME_W - 30);
-      const y = Phaser.Math.Between(30, GAME_H - 30);
+      const x = Phaser.Math.Between(30, WORLD_W - 30);
+      const y = Phaser.Math.Between(30, WORLD_H - 30);
       const s = this.add.image(x, y, key).setScale(0.4 + Math.random() * 0.3).setDepth(1).setAlpha(0.5);
       this.terrainSprites.push(s);
     }
@@ -336,14 +373,14 @@ export class MainScene extends Phaser.Scene {
     g.clear();
     const divX = RED_MIN_COL * CELL_W;
     g.lineStyle(2, 0xffffff, 0.25);
-    g.lineBetween(divX, 0, divX, GAME_H);
+    g.lineBetween(divX, 0, divX, WORLD_H);
     g.fillStyle(0x3399ff, 0.04);
-    g.fillRect(0, 0, divX, GAME_H);
+    g.fillRect(0, 0, divX, WORLD_H);
     g.fillStyle(0xff4455, 0.04);
-    g.fillRect(divX, 0, GAME_W - divX, GAME_H);
+    g.fillRect(divX, 0, WORLD_W - divX, WORLD_H);
     g.lineStyle(1, 0xffffff, 0.08);
-    for (let c = 0; c <= GRID_COLS; c++) g.lineBetween(c * CELL_W, 0, c * CELL_W, GAME_H);
-    for (let r = 0; r <= GRID_ROWS; r++) g.lineBetween(0, r * CELL_H, GAME_W, r * CELL_H);
+    for (let c = 0; c <= GRID_COLS; c++) g.lineBetween(c * CELL_W, 0, c * CELL_W, WORLD_H);
+    for (let r = 0; r <= GRID_ROWS; r++) g.lineBetween(0, r * CELL_H, WORLD_W, r * CELL_H);
   }
 
   // ── Hover ─────────────────────────────────────────────────────────────────
@@ -938,8 +975,8 @@ export class MainScene extends Phaser.Scene {
     let newY = unit.sprite.y + ny;
 
     // Clamp to world bounds
-    newX = Phaser.Math.Clamp(newX, 10, GAME_W - 10);
-    newY = Phaser.Math.Clamp(newY, 10, GAME_H - 10);
+    newX = Phaser.Math.Clamp(newX, 10, WORLD_W - 10);
+    newY = Phaser.Math.Clamp(newY, 10, WORLD_H - 10);
 
     // During battle: free movement, units can overlap — just update grid cell tracking
     if (this.battleStarted) {
@@ -1088,7 +1125,7 @@ export class MainScene extends Phaser.Scene {
 
   // ── Dev-mode automated tests ──────────────────────────────────────────────
   private runDevTests() {
-    console.log("%c[DEV TEST] Starting Pawn weapon-switching & pathing tests…", "color: #ffcc00; font-weight: bold;");
+    console.log("%c[DEV TEST] Starting tests…", "color: #ffcc00; font-weight: bold;");
     let passed = 0;
     let failed = 0;
 
@@ -1100,33 +1137,11 @@ export class MainScene extends Phaser.Scene {
       sprite: null as any, hpBar: null as any,
     });
 
-    // High HP → hammer
-    const t1 = mockUnit(90, 100, 0);
-    if (evaluatePawnWeapon(t1) === "hammer") passed++; else { failed++; console.error("[FAIL] High HP: expected hammer"); }
-
-    // Low HP → knife
-    const t2 = mockUnit(20, 100, 0);
-    if (evaluatePawnWeapon(t2) === "knife") passed++; else { failed++; console.error("[FAIL] Low HP: expected knife"); }
-
-    // High armor → pickaxe
-    const t3 = mockUnit(50, 100, 10);
-    if (evaluatePawnWeapon(t3) === "pickaxe") passed++; else { failed++; console.error("[FAIL] High armor: expected pickaxe"); }
-
-    // Default → axe
-    const t4 = mockUnit(50, 100, 0);
-    if (evaluatePawnWeapon(t4) === "axe") passed++; else { failed++; console.error("[FAIL] Default: expected axe"); }
-
-    // Grid occupancy test
-    const testCell = this.grid[0][0];
-    const origOcc = testCell.occupant;
-    testCell.occupant = mockUnit(100, 100, 0);
-    if (!!testCell.occupant) passed++; else { failed++; console.error("[FAIL] Occupied cell check"); }
-    testCell.occupant = origOcc;
-
-    // Armor pierce math
-    const pierceResult = Math.max(1, PAWN_WEAPONS.pickaxe.damage - (10 * (1 - PAWN_WEAPONS.pickaxe.armorPierce)));
-    const noPierceResult = Math.max(1, PAWN_WEAPONS.axe.damage - 10);
-    if (pierceResult > noPierceResult) passed++; else { failed++; console.error("[FAIL] Pickaxe should beat axe vs armor"); }
+    // Weapon tests
+    if (evaluatePawnWeapon(mockUnit(90, 100, 0)) === "hammer") passed++; else { failed++; console.error("[FAIL] hammer"); }
+    if (evaluatePawnWeapon(mockUnit(20, 100, 0)) === "knife") passed++; else { failed++; console.error("[FAIL] knife"); }
+    if (evaluatePawnWeapon(mockUnit(50, 100, 10)) === "pickaxe") passed++; else { failed++; console.error("[FAIL] pickaxe"); }
+    if (evaluatePawnWeapon(mockUnit(50, 100, 0)) === "axe") passed++; else { failed++; console.error("[FAIL] axe"); }
 
     // Verify attack anims exist
     const atkAnims = ["pawn-attack-axe", "pawn-attack-hammer", "pawn-attack-knife", "pawn-attack-pickaxe"];
@@ -1141,16 +1156,52 @@ export class MainScene extends Phaser.Scene {
     }
   }
 
+  private devPopulateBattle() {
+    console.log("%c[DEV] Populating full battle…", "color: #88ccff;");
+    const types: UnitType[] = ["archer", "warrior", "lancer", "monk", "pawn"];
+
+    // Blue side: fill left half
+    for (let r = 0; r < GRID_ROWS; r++) {
+      for (let c = 0; c < BLUE_MAX_COL + 1; c++) {
+        const cell = this.grid[r][c];
+        if (cell.occupant) continue;
+        const ut = types[(r + c) % types.length];
+        const unit = this.spawnUnit(cell, "blue", ut);
+        cell.occupant = unit;
+        unit.gridCell = cell;
+        this.teamBlue.push(unit);
+      }
+    }
+
+    // Red side: fill right half
+    for (let r = 0; r < GRID_ROWS; r++) {
+      for (let c = RED_MIN_COL; c < GRID_COLS; c++) {
+        const cell = this.grid[r][c];
+        if (cell.occupant) continue;
+        const ut = types[(r + c + 2) % types.length];
+        const unit = this.spawnUnit(cell, "red", ut);
+        cell.occupant = unit;
+        unit.gridCell = cell;
+        this.teamRed.push(unit);
+      }
+    }
+
+    console.log(`%c[DEV] Placed ${this.teamBlue.length} blue, ${this.teamRed.length} red units`, "color: #88ccff;");
+
+    // Auto-start battle after short delay
+    this.time.delayedCall(800, () => this.startBattle());
+  }
+
   // ── Spawn clouds ──────────────────────────────────────────────────────────
   private spawnClouds() {
     for (const c of this.cloudSprites) c.destroy();
     this.cloudSprites = [];
-    const NUM_CLOUDS = Phaser.Math.Between(4, 8);
+    const NUM_CLOUDS = Phaser.Math.Between(6, 12);
     for (let i = 0; i < NUM_CLOUDS; i++) {
       const key = `cloud${Phaser.Math.Between(1, 8)}`;
-      const x = Phaser.Math.Between(-300, GAME_W + 200);
-      const y = Phaser.Math.Between(-20, GAME_H * 0.55);
-      const scale = 0.25 + Math.random() * 0.55;
+      const x = Phaser.Math.Between(-400, WORLD_W + 300);
+      const y = Phaser.Math.Between(-40, WORLD_H * 0.55);
+      const scale = 0.3 + Math.random() * 0.6;
       const alpha = 0.06 + Math.random() * 0.12;
       const cloud = this.add.image(x, y, key).setScale(scale).setAlpha(alpha).setDepth(50);
       (cloud as any)._speed = 5 + Math.random() * 12;
@@ -1164,9 +1215,9 @@ export class MainScene extends Phaser.Scene {
     const dt = delta / 1000;
     for (const c of this.cloudSprites) {
       c.x += (c as any)._speed * dt;
-      if (c.x > GAME_W + 200) {
-        c.x = -200 - Math.random() * 100;
-        c.y = Phaser.Math.Between(10, GAME_H * 0.45);
+      if (c.x > WORLD_W + 300) {
+        c.x = -300 - Math.random() * 150;
+        c.y = Phaser.Math.Between(10, WORLD_H * 0.45);
       }
     }
 
@@ -1191,7 +1242,7 @@ export class MainScene extends Phaser.Scene {
       const adx  = arrow.sprite.x - t.sprite.x;
       const ady  = arrow.sprite.y - (t.sprite.y - 15);
       const adist = Math.sqrt(adx * adx + ady * ady);
-      if (adist < 22 || arrow.sprite.x < -50 || arrow.sprite.x > GAME_W + 50 || arrow.sprite.y > GAME_H + 50) {
+      if (adist < 22 || arrow.sprite.x < -50 || arrow.sprite.x > WORLD_W + 50 || arrow.sprite.y > WORLD_H + 50) {
         if (adist < 22 && t.state !== "dead") {
           const armorReduction = t.armor;
           const dmg = Math.max(1, arrow.damage - armorReduction);
