@@ -138,6 +138,7 @@ export class MainScene extends Phaser.Scene {
   private hoverGraphics!: Phaser.GameObjects.Graphics;
   private placementText!: Phaser.GameObjects.Text;
   private terrainSprites: Phaser.GameObjects.Image[] = [];
+  private cloudSprites: Phaser.GameObjects.Image[] = [];
 
   constructor() { super("MainScene"); }
 
@@ -203,6 +204,11 @@ export class MainScene extends Phaser.Scene {
 
     // Dust effect
     this.load.image("dust-img", "/assets/Dust_01.png");
+
+    // Clouds
+    for (let i = 1; i <= 8; i++) {
+      this.load.image(`cloud${i}`, `/assets/Clouds_0${i}.png`);
+    }
   }
 
   // ── Create ─────────────────────────────────────────────────────────────────
@@ -215,6 +221,7 @@ export class MainScene extends Phaser.Scene {
     this.buildGrid();
     this.createAnims();
     this.spawnTerrain();
+    this.spawnClouds();
 
     this.gridGraphics  = this.add.graphics();
     this.hoverGraphics = this.add.graphics();
@@ -1134,8 +1141,35 @@ export class MainScene extends Phaser.Scene {
     }
   }
 
+  // ── Spawn clouds ──────────────────────────────────────────────────────────
+  private spawnClouds() {
+    for (const c of this.cloudSprites) c.destroy();
+    this.cloudSprites = [];
+    const NUM_CLOUDS = 5;
+    for (let i = 0; i < NUM_CLOUDS; i++) {
+      const key = `cloud${Phaser.Math.Between(1, 8)}`;
+      const x = Phaser.Math.Between(-200, GAME_W + 100);
+      const y = Phaser.Math.Between(10, GAME_H * 0.45);
+      const scale = 0.35 + Math.random() * 0.45;
+      const alpha = 0.15 + Math.random() * 0.2;
+      const cloud = this.add.image(x, y, key).setScale(scale).setAlpha(alpha).setDepth(50);
+      (cloud as any)._speed = 8 + Math.random() * 14;
+      this.cloudSprites.push(cloud);
+    }
+  }
+
   // ── Main loop ─────────────────────────────────────────────────────────────
   update(_time: number, delta: number) {
+    // Always drift clouds, even before battle
+    const dt = delta / 1000;
+    for (const c of this.cloudSprites) {
+      c.x += (c as any)._speed * dt;
+      if (c.x > GAME_W + 200) {
+        c.x = -200 - Math.random() * 100;
+        c.y = Phaser.Math.Between(10, GAME_H * 0.45);
+      }
+    }
+
     if (!this.battleStarted) return;
 
     const blueAlive = this.teamBlue.some(u => u.state !== "dead");
@@ -1146,12 +1180,12 @@ export class MainScene extends Phaser.Scene {
     for (const u of this.teamRed)  this.updateUnit(u, delta);
 
     // Arrow physics
-    const dt = delta / 1000;
+    const adt = delta / 1000;
     for (let i = this.arrows.length - 1; i >= 0; i--) {
       const arrow = this.arrows[i];
-      arrow.vy += arrow.gravity * dt;
-      arrow.sprite.x += arrow.vx * dt;
-      arrow.sprite.y += arrow.vy * dt;
+      arrow.vy += arrow.gravity * adt;
+      arrow.sprite.x += arrow.vx * adt;
+      arrow.sprite.y += arrow.vy * adt;
       arrow.sprite.setRotation(Math.atan2(arrow.vy, arrow.vx));
       const t    = arrow.targetUnit;
       const adx  = arrow.sprite.x - t.sprite.x;
