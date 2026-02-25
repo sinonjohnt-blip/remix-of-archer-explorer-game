@@ -8,14 +8,14 @@ interface UnitSelectorProps {
   onSelect: (type: UnitType) => void;
 }
 
-const DISPLAY_SIZE = 36;
+const DISPLAY_SIZE = 40;
 
-const units: { type: UnitType; label: string; sprite: string; cost: number; frames: number; frameSize: number; iconScale?: number }[] = [
-  { type: "archer",  label: "Archer",  sprite: "/assets/Archer_Idle.png",    cost: 50,  frames: 6,  frameSize: 192 },
-  { type: "warrior", label: "Warrior", sprite: "/assets/Warrior_Idle.png",   cost: 80,  frames: 8,  frameSize: 192 },
-  { type: "lancer",  label: "Lancer",  sprite: "/assets/Lancer_Idle.png",    cost: 100, frames: 12, frameSize: 160, iconScale: 2.2 },
-  { type: "monk",    label: "Monk",    sprite: "/assets/Monk_Idle.png",      cost: 60,  frames: 6,  frameSize: 192 },
-  { type: "pawn",    label: "Pawn",    sprite: "/assets/Pawn_Idle_Axe.png",  cost: 70,  frames: 8,  frameSize: 192 },
+const units: { type: UnitType; label: string; icon: string; cost: number }[] = [
+  { type: "archer",  label: "Archer",  icon: "/assets/Avatar_Archer.png",  cost: 50  },
+  { type: "warrior", label: "Warrior", icon: "/assets/Avatar_Warrior.png", cost: 80  },
+  { type: "lancer",  label: "Lancer",  icon: "/assets/Avatar_Lancer.png",  cost: 100 },
+  { type: "monk",    label: "Monk",    icon: "/assets/Avatar_Monk.png",    cost: 60  },
+  { type: "pawn",    label: "Pawn",    icon: "/assets/Avatar_Pawn.png",    cost: 70  },
 ];
 
 const UnitSelector: React.FC<UnitSelectorProps> = ({ selected, onSelect }) => {
@@ -29,12 +29,6 @@ const UnitSelector: React.FC<UnitSelectorProps> = ({ selected, onSelect }) => {
       </span>
       {units.map((u) => {
         const isActive = selected === u.type;
-        const scale = u.iconScale ?? 1;
-        const frameDisplaySize = DISPLAY_SIZE * scale;
-        const scaledTotalW = u.frames * frameDisplaySize;
-        const scaledTotalH = frameDisplaySize;
-        const offsetX = (DISPLAY_SIZE - frameDisplaySize) / 2;
-        const offsetY = (DISPLAY_SIZE - frameDisplaySize) / 2;
         return (
           <button
             key={u.type}
@@ -58,29 +52,15 @@ const UnitSelector: React.FC<UnitSelectorProps> = ({ selected, onSelect }) => {
                 transition: "all 0.1s",
               }}
             >
-              <div
+              <img
+                src={u.icon}
+                alt={u.label}
                 style={{
                   width: DISPLAY_SIZE,
                   height: DISPLAY_SIZE,
-                  overflow: "hidden",
-                  position: "relative",
+                  imageRendering: "pixelated",
                 }}
-              >
-                <div
-                  style={{
-                    position: "absolute",
-                    left: offsetX,
-                    top: offsetY,
-                    width: frameDisplaySize,
-                    height: frameDisplaySize,
-                    backgroundImage: `url(${u.sprite})`,
-                    backgroundSize: `${scaledTotalW}px ${scaledTotalH}px`,
-                    backgroundPosition: "0 0",
-                    backgroundRepeat: "no-repeat",
-                    imageRendering: "pixelated",
-                  }}
-                />
-              </div>
+              />
               <span
                 className="text-[10px] font-bold mt-0.5"
                 style={{
