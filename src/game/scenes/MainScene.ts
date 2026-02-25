@@ -1145,15 +1145,15 @@ export class MainScene extends Phaser.Scene {
   private spawnClouds() {
     for (const c of this.cloudSprites) c.destroy();
     this.cloudSprites = [];
-    const NUM_CLOUDS = 5;
+    const NUM_CLOUDS = Phaser.Math.Between(4, 8);
     for (let i = 0; i < NUM_CLOUDS; i++) {
       const key = `cloud${Phaser.Math.Between(1, 8)}`;
-      const x = Phaser.Math.Between(-200, GAME_W + 100);
-      const y = Phaser.Math.Between(10, GAME_H * 0.45);
-      const scale = 0.35 + Math.random() * 0.45;
-      const alpha = 0.15 + Math.random() * 0.2;
+      const x = Phaser.Math.Between(-300, GAME_W + 200);
+      const y = Phaser.Math.Between(-20, GAME_H * 0.55);
+      const scale = 0.25 + Math.random() * 0.55;
+      const alpha = 0.06 + Math.random() * 0.12;
       const cloud = this.add.image(x, y, key).setScale(scale).setAlpha(alpha).setDepth(50);
-      (cloud as any)._speed = 8 + Math.random() * 14;
+      (cloud as any)._speed = 5 + Math.random() * 12;
       this.cloudSprites.push(cloud);
     }
   }
